@@ -13,6 +13,7 @@
 #include "jniutils.h"
 #include "alerthandler.h"
 #include "torrentinfo.h"
+#include <boost/filesystem.hpp>
 
 using solt::torrent_alert_handler;
 #define LISTEN_PORT_MIN 49160
@@ -113,6 +114,8 @@ JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_setSession(
 	try {
 		gSession_init();
 		solt::JniToStdString(env, &gDefaultSave, SavePath);
+		boost::filesystem::path save = boost::filesystem::canonical(boost::filesystem::path(gDefaultSave));
+		gDefaultSave = save.string();
 		gSession->set_alert_mask(
 				libtorrent::alert::error_notification
 						| libtorrent::alert::storage_notification);
@@ -460,7 +463,7 @@ bool saveResumeData() {
 			libtorrent::bencode(std::back_inserter(out), *rd->resume_data);
 			boost::filesystem::path savePath = h.save_path();
 			savePath /= (h.name() + RESUME_SUFFIX);
-			solt::SaveFile(savePath, out);
+			solt::SaveFile(savePath.string(), out);
 		}
 		--num_resume_data;
 	}
@@ -1976,7 +1979,7 @@ JNIEXPORT jobjectArray JNICALL Java_com_solt_libtorrent_LibTorrent_getTorrentFil
 					jobject entry = NULL;
 					for (int i = 0; i < info.num_files(); ++i) {
 						libtorrent::file_entry const& file = info.file_at(i);
-						jstring path = env->NewStringUTF(file.path.string().c_str());
+						jstring path = env->NewStringUTF(file.path.c_str());
 						jboolean execAttr = file.executable_attribute ? JNI_TRUE : JNI_FALSE;
 						jboolean hiddenAttr = file.hidden_attribute ? JNI_TRUE : JNI_FALSE;
 						jboolean padFile = file.pad_file ? JNI_TRUE : JNI_FALSE;

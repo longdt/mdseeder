@@ -29,7 +29,7 @@
 namespace solt {
 #define RESUME_SUFFIX ".resume"
 
-int SaveFile(boost::filesystem::path const& filename, std::vector<char>& v);
+int SaveFile(std::string const& filename, std::vector<char>& v);
 
 inline void JStringToHash(JNIEnv *env, libtorrent::sha1_hash &hash,
 		jstring JniString) {
