@@ -48,6 +48,14 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addTorrent
 
 /*
  * Class:     com_solt_libtorrent_LibTorrent
+ * Method:    addAsyncTorrent
+ * Signature: (Ljava/lang/String;IZ)Ljava/lang/String;
+ */
+JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addAsyncTorrent
+  (JNIEnv *, jobject, jstring, jint, jboolean);
+
+/*
+ * Class:     com_solt_libtorrent_LibTorrent
  * Method:    saveResumeData
  * Signature: ()Z
  */

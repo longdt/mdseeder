@@ -148,7 +148,8 @@ JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_setSession(
 		} else {
 			gSession->set_download_rate_limit(0);
 		}
-
+		//add stream plugin
+		gSession->add_extension(&solt::create_stream_plugin);
 		//init partialpieceinfo class and constructor
 		jclass ppieceinfo = env->FindClass(
 				"com/solt/libtorrent/PartialPieceInfo");
@@ -345,6 +346,7 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addTorrent(
 				}
 				torrentParams.storage_mode = storageMode;
 				TorrentInfo *torrent = new TorrentInfo();
+				torrentParams.userdata = &torrent->cancel_piece_tasks;
 				torrent->handle = gSession->add_torrent(torrentParams, ec);
 				libtorrent::torrent_handle* th = &torrent->handle;
 				if (ec) {
@@ -360,7 +362,7 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addTorrent(
 					if (th->is_paused()) {
 						th->resume();
 					}
-					th->add_extension(&solt::create_stream_plugin, &torrent->cancel_piece_tasks);
+
 					th->auto_managed(autoManaged);
 					gTorrents[hashCode] = torrent;
 					char ih[41];
@@ -368,6 +370,88 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addTorrent(
 					result = env->NewStringUTF(ih);
 				}
 
+			}
+		}
+	} catch (...) {
+		LOG_ERR("Exception: failed to add torrent");
+	}
+	return result;
+}
+
+JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addAsyncTorrent(
+		JNIEnv *env, jobject obj, jstring TorrentFile, jint StorageMode,
+		jboolean autoManaged) {
+	jstring result = NULL;
+	boost::unique_lock< boost::shared_mutex > lock(access);
+	try {
+		if (gSessionState) {
+			//compute contentFile
+			std::string torrentFile;
+			solt::JniToStdString(env, &torrentFile, TorrentFile);
+
+			boost::intrusive_ptr<libtorrent::torrent_info> t;
+			libtorrent::error_code ec;
+			t = new libtorrent::torrent_info(torrentFile.c_str(), ec);
+			if (ec) {
+				std::string errorMessage = ec.message();
+				LOG_ERR("%s: %s\n", torrentFile.c_str(), errorMessage.c_str());
+				return result;
+			}
+			const libtorrent::sha1_hash &hashCode = t->info_hash();
+			//find torrent_handle
+			std::map<libtorrent::sha1_hash, TorrentInfo*>::iterator iter =
+					gTorrents.find(hashCode);
+			if (iter != gTorrents.end()) {
+				LOG_DEBUG(
+						"Torrent file already presents: %s", torrentFile.c_str());
+				char ih[41];
+				libtorrent::to_hex((char const*) &hashCode[0], 20, ih);
+				result = env->NewStringUTF(ih);
+			} else {
+				LOG_DEBUG("TorrentFile: %s", torrentFile.c_str());
+
+				LOG_DEBUG("%s\n", t->name().c_str());
+				LOG_DEBUG("StorageMode: %d\n", StorageMode);
+
+				libtorrent::add_torrent_params torrentParams;
+				libtorrent::lazy_entry resume_data;
+
+				boost::filesystem::path save_path = gDefaultSave;
+				std::string filename =
+						(save_path / (t->name() + RESUME_SUFFIX)).string();
+				std::vector<char> buf;
+				boost::system::error_code errorCode;
+				if (libtorrent::load_file(filename.c_str(), buf, errorCode)
+						== 0)
+					torrentParams.resume_data = &buf;
+
+				torrentParams.ti = t;
+				torrentParams.save_path = gDefaultSave;
+				torrentParams.duplicate_is_error = false;
+				torrentParams.auto_managed = false;
+				torrentParams.upload_mode = true;
+				libtorrent::storage_mode_t storageMode =
+						libtorrent::storage_mode_sparse;
+				switch (StorageMode) {
+				case 0:
+					storageMode = libtorrent::storage_mode_allocate;
+					break;
+				case 1:
+					storageMode = libtorrent::storage_mode_sparse;
+					break;
+				case 2:
+					storageMode = libtorrent::storage_mode_compact;
+					break;
+				}
+				torrentParams.storage_mode = storageMode;
+				TorrentInfo *torrent = new TorrentInfo();
+				torrentParams.userdata = &torrent->cancel_piece_tasks;
+				gSession->async_add_torrent(torrentParams);
+
+				gTorrents[hashCode] = torrent;
+				char ih[41];
+				libtorrent::to_hex((char const*) &hashCode[0], 20, ih);
+				result = env->NewStringUTF(ih);
 			}
 		}
 	} catch (...) {

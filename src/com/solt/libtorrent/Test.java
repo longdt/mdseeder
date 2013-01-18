@@ -38,11 +38,13 @@ public class Test {
 		File dir = new File(".");
 		for (String f : dir.list()) {
 			if (f.endsWith(".torrent")) {
-				torrents.put(libTorrent.addTorrent(f, 0), f);
+				torrents.put(libTorrent.addAsyncTorrent(f, 0), f);
 			}
 		}
-		final String hashCode = libTorrent.addTorrent(torrentFile, 0);
-		
+		final String hashCode = libTorrent.addAsyncTorrent(torrentFile, 0);
+		libTorrent.setAutoManaged(hashCode, false);
+		libTorrent.resumeTorrent(hashCode);
+		libTorrent.setUploadMode(hashCode, false);
 //		libTorrent.setTorrentDownloadLimit(hashCode, 1024 * 1024);
 		String mediaUrl = "http://localhost:18008/"
 				+ URLEncoder.encode(hashCode, "UTF-8");
