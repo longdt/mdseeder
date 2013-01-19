@@ -154,7 +154,6 @@ public class LibTorrent {
 	 * <ul>
 	 * <li>0-storage_mode_allocate
 	 * <li>1-storage_mode_sparse
-	 * <li>2-storage_mode_compact
 	 * </ul>
 	 * 
 	 * @param torentFile
@@ -173,7 +172,6 @@ public class LibTorrent {
 	 * <ul>
 	 * <li>0-storage_mode_allocate
 	 * <li>1-storage_mode_sparse
-	 * <li>2-storage_mode_compact
 	 * </ul>
 	 * 
 	 * @param torentFile
