@@ -783,9 +783,7 @@ JNIEXPORT jint JNICALL Java_com_solt_libtorrent_LibTorrent_getTorrentProgress(
 			pTorrentInfo = GetTorrentInfo(env, hash);
 			if (pTorrentInfo) {
 				libtorrent::torrent_handle* pTorrent = &pTorrentInfo->handle;
-				libtorrent::torrent_status s = pTorrent->status();
-				if (s.state != libtorrent::torrent_status::seeding
-						&& pTorrent->has_metadata()) {
+				if (pTorrent->has_metadata() && !pTorrent->is_seed()) {
 					result = 0;
 					std::vector<libtorrent::size_type> file_progress;
 					pTorrent->file_progress(file_progress);
@@ -801,8 +799,7 @@ JNIEXPORT jint JNICALL Java_com_solt_libtorrent_LibTorrent_getTorrentProgress(
 						result += progress;
 					}
 					result = result / files_num;
-				} else if (s.state == libtorrent::torrent_status::seeding
-						&& pTorrent->has_metadata())
+				} else if (pTorrent->has_metadata() && pTorrent->is_seed())
 					result = 1000;
 			}
 		}
@@ -832,9 +829,7 @@ JNIEXPORT jlong JNICALL Java_com_solt_libtorrent_LibTorrent_getTorrentProgressSi
 			pTorrentInfo = GetTorrentInfo(env, hash);
 			if (pTorrentInfo) {
 				libtorrent::torrent_handle* pTorrent = &pTorrentInfo->handle;
-				libtorrent::torrent_status s = pTorrent->status();
-				if (s.state != libtorrent::torrent_status::seeding
-						&& pTorrent->has_metadata()) {
+				if (pTorrent->has_metadata() && !pTorrent->is_seed()) {
 					std::vector<libtorrent::size_type> file_progress;
 					pTorrent->file_progress(file_progress, flags);
 					libtorrent::torrent_info const& info =
@@ -849,8 +844,7 @@ JNIEXPORT jlong JNICALL Java_com_solt_libtorrent_LibTorrent_getTorrentProgressSi
 					if (bytes_size >= 0) {
 						result = bytes_size;
 					}
-				} else if (s.state == libtorrent::torrent_status::seeding
-						&& pTorrent->has_metadata()) {
+				} else if (pTorrent->has_metadata() && pTorrent->is_seed()) {
 					libtorrent::torrent_info const& info =
 							pTorrent->get_torrent_info();
 					long long bytes_size = info.total_size();
@@ -894,7 +888,7 @@ JNIEXPORT jlong JNICALL Java_com_solt_libtorrent_LibTorrent_getTorrentProgressSi
 				return result;
 			}
 			libtorrent::torrent_handle* pTorrent = &(pTorrentInfo->handle);
-			libtorrent::torrent_status s = pTorrent->status();
+			libtorrent::torrent_status s = pTorrent->status(libtorrent::torrent_handle::query_pieces);
 			if (s.state != libtorrent::torrent_status::seeding
 					&& pTorrent->has_metadata()) {
 				if (!s.pieces.empty()) {
@@ -1166,7 +1160,7 @@ JNIEXPORT jint JNICALL Java_com_solt_libtorrent_LibTorrent_getTorrentDownloadRat
 			pTorrentInfo = GetTorrentInfo(env, hash);
 			if (pTorrentInfo) {
 				libtorrent::torrent_handle* pTorrent = &pTorrentInfo->handle;
-				libtorrent::torrent_status t_s = pTorrent->status();
+				libtorrent::torrent_status t_s = pTorrent->status(0);
 				result = payload ? t_s.download_payload_rate : t_s.download_rate;
 			}
 		}
@@ -1439,7 +1433,7 @@ JNIEXPORT jint JNICALL Java_com_solt_libtorrent_LibTorrent_getTorrentDownloadRat
 			pTorrentInfo = GetTorrentInfo(env, hash);
 			if (pTorrentInfo) {
 				libtorrent::torrent_handle* pTorrent = &(pTorrentInfo->handle);
-				libtorrent::torrent_status s = pTorrent->status();
+				libtorrent::torrent_status s = pTorrent->status(libtorrent::torrent_handle::query_pieces);
 				if (s.state != libtorrent::torrent_status::seeding
 						&& pTorrent->has_metadata()) {
 					if (!s.pieces.empty()) {
@@ -1841,7 +1835,7 @@ JNIEXPORT jint JNICALL Java_com_solt_libtorrent_LibTorrent_getTorrentState(
 			pTorrentInfo = GetTorrentInfo(env, hash);
 			if (pTorrentInfo) {
 				libtorrent::torrent_handle* pTorrent = &pTorrentInfo->handle;
-				libtorrent::torrent_status t_s = pTorrent->status();
+				libtorrent::torrent_status t_s = pTorrent->status(0);
 				bool paused = pTorrent->is_paused();
 				bool auto_managed = pTorrent->is_auto_managed();
 				if (paused && auto_managed)
@@ -2104,8 +2098,6 @@ JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_setTorrentFilesPr
 			pTorrentInfo = GetTorrentInfo(env, hash);
 			if (pTorrentInfo) {
 				libtorrent::torrent_handle* pTorrent = &pTorrentInfo->handle;
-				std::string out;
-				libtorrent::torrent_status s = pTorrent->status();
 				if (pTorrent->has_metadata()) {
 					libtorrent::torrent_info const& info =
 							pTorrent->get_torrent_info();
@@ -2158,7 +2150,6 @@ JNIEXPORT jbyteArray JNICALL Java_com_solt_libtorrent_LibTorrent_getTorrentFiles
 			pTorrentInfo = GetTorrentInfo(env, hash);
 			if (pTorrentInfo) {
 				libtorrent::torrent_handle* pTorrent = &pTorrentInfo->handle;
-				libtorrent::torrent_status s = pTorrent->status();
 				if (pTorrent->has_metadata()) {
 					libtorrent::torrent_info const& info =
 							pTorrent->get_torrent_info();
