@@ -30,7 +30,7 @@ if (env->GetStringUTFLength(hashJString) < 40) { \
 }
 
 //-----------------------------------------------------------------------------
-
+void gSession_del(bool saveState = true);
 //-----------------------------------------------------------------------------
 
 
@@ -49,14 +49,15 @@ static jmethodID partialPieceInit = NULL;
 static jclass torrentException = NULL;
 static jclass fileEntry = NULL;
 static jmethodID fileEntryInit = NULL;
-void gSession_init() {
+inline void gSession_init() {
 	using namespace libtorrent;
 	if (!gSession) {
 		gSession = new libtorrent::session(fingerprint("LT", LIBTORRENT_VERSION_MAJOR, LIBTORRENT_VERSION_MINOR, 0, 0), session::add_default_plugins);
 		//load session state
+		std::string filename = combine_path(gDefaultSave, combine_path(RESUME, SESSION_STATE_FILE));
 		std::vector<char> in;
 		error_code ec;
-		if (load_file(SESSION_STATE_FILE, in, ec) == 0) {
+		if (load_file(filename, in, ec) == 0) {
 			lazy_entry e;
 			if (lazy_bdecode(&in[0], &in[0] + in.size(), e) == 0)
 				gSession->load_state(e);
@@ -64,23 +65,21 @@ void gSession_init() {
 	}
 }
 
-void gSession_del() {
+inline void gSession_del(bool saveState) {
 	if (gSession) {
-		//saving session state
-		using namespace libtorrent;
-		entry session_state;
-		gSession->save_state(session_state);
-		std::vector<char> out;
-		bencode(std::back_inserter(out), session_state);
-		solt::SaveFile(SESSION_STATE_FILE, out);
+		if (saveState) {
+			//saving session state
+			entry session_state;
+			gSession->save_state(session_state);
+			std::vector<char> out;
+			bencode(std::back_inserter(out), session_state);
+			std::string filename = combine_path(gDefaultSave, combine_path(RESUME, SESSION_STATE_FILE));
+			solt::SaveFile(filename, out);
+		}
 		//delete session
 		delete gSession;
 		gSession = NULL;
 	}
-}
-
-libtorrent::session* getGSession() {
-	return gSession;
 }
 
 //-----------------------------------------------------------------------------
@@ -114,7 +113,6 @@ JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_setSession(
 	jboolean result = JNI_FALSE;
 	boost::unique_lock< boost::shared_mutex > lock(access);
 	try {
-		gSession_init();
 		solt::JniToStdString(env, &gDefaultSave, SavePath);
 		boost::filesystem::path save = boost::filesystem::canonical(boost::filesystem::path(gDefaultSave));
 		gDefaultSave = save.string();
@@ -123,6 +121,7 @@ JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_setSession(
 		create_directory(combine_path(gDefaultSave, RESUME), ec);
 		if (ec)
 			fprintf(stderr, "failed to create resume file directory: %s\n", ec.message().c_str());
+		gSession_init();
 		gSession->set_alert_mask(
 				libtorrent::alert::error_notification
 						| libtorrent::alert::storage_notification);
@@ -187,7 +186,7 @@ JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_setSession(
 		gSessionState = true;
 	} catch (...) {
 		LOG_ERR("Exception: failed to set session");
-		gSession_del();
+		gSession_del(false);
 		gSessionState = false;
 	}
 	if (!gSessionState)

@@ -9,11 +9,6 @@
 extern "C" {
 #endif
 
-
-JNIEXPORT void gSession_init();
-JNIEXPORT void gSession_del();
-JNIEXPORT libtorrent::session* getGSession();
-
 /*
  * Class:     com_solt_libtorrent_LibTorrent
  * Method:    setSession
