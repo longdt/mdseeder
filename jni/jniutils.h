@@ -8,7 +8,6 @@
 #ifndef JNIUTILS_H_
 #define JNIUTILS_H_
 #include <jni.h>
-#include <boost/filesystem/path.hpp>
 #include <vector>
 #include "libtorrent/peer_id.hpp"
 #include "libtorrent/torrent_handle.hpp"

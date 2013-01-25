@@ -7,6 +7,7 @@
 #include "libtorrent/size_type.hpp"
 #include "libtorrent/peer_id.hpp"
 #include "libtorrent/escape_string.hpp"
+#include "libtorrent/file.hpp"
 #include "stream.hpp"
 #include "concurrentqueue.h"
 #include "piecedataqueue.h"
@@ -16,6 +17,7 @@
 #include <boost/filesystem.hpp>
 
 using solt::torrent_alert_handler;
+using namespace libtorrent;
 #define LISTEN_PORT_MIN 49160
 #define LISTEN_PORT_MAX 65534
 #define SESSION_STATE_FILE ".ses_state"
@@ -40,7 +42,7 @@ static boost::shared_mutex access;
 static boost::mutex down_queue_mutex;
 static boost::mutex alert_mutex;
 static libtorrent::proxy_settings gProxy;
-static std::string gDefaultSave;
+std::string gDefaultSave;
 static volatile bool gSessionState = false;
 static jclass partialPiece = NULL;
 static jmethodID partialPieceInit = NULL;
@@ -116,6 +118,11 @@ JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_setSession(
 		solt::JniToStdString(env, &gDefaultSave, SavePath);
 		boost::filesystem::path save = boost::filesystem::canonical(boost::filesystem::path(gDefaultSave));
 		gDefaultSave = save.string();
+		// create directory for resume files
+		error_code ec;
+		create_directory(combine_path(gDefaultSave, RESUME), ec);
+		if (ec)
+			fprintf(stderr, "failed to create resume file directory: %s\n", ec.message().c_str());
 		gSession->set_alert_mask(
 				libtorrent::alert::error_notification
 						| libtorrent::alert::storage_notification);
@@ -324,10 +331,7 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addTorrent(
 
 				libtorrent::add_torrent_params torrentParams;
 				libtorrent::lazy_entry resume_data;
-
-				boost::filesystem::path save_path = gDefaultSave;
-				std::string filename =
-						(save_path / (t->name() + RESUME)).string();
+				std::string filename = combine_path(gDefaultSave, combine_path(RESUME, to_hex(t->info_hash().to_string()) + RESUME));
 				std::vector<char> buf;
 				boost::system::error_code errorCode;
 				if (libtorrent::load_file(filename.c_str(), buf, errorCode)
@@ -421,9 +425,7 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addAsyncTorrent(
 				libtorrent::add_torrent_params torrentParams;
 				libtorrent::lazy_entry resume_data;
 
-				boost::filesystem::path save_path = gDefaultSave;
-				std::string filename =
-						(save_path / (t->name() + RESUME)).string();
+				std::string filename = combine_path(gDefaultSave, combine_path(RESUME, to_hex(t->info_hash().to_string()) + RESUME));
 				std::vector<char> buf;
 				boost::system::error_code errorCode;
 				if (libtorrent::load_file(filename.c_str(), buf, errorCode)
@@ -541,13 +543,11 @@ bool saveResumeData() {
 			continue;
 		}
 
-		torrent_handle h = rd->handle;
 		if (rd->resume_data) {
 			std::vector<char> out;
 			libtorrent::bencode(std::back_inserter(out), *rd->resume_data);
-			boost::filesystem::path savePath = h.save_path();
-			savePath /= (h.name() + RESUME);
-			solt::SaveFile(savePath.string(), out);
+			std::string filename = combine_path(gDefaultSave, combine_path(RESUME, to_hex(rd->handle.info_hash().to_string()) + RESUME));
+			solt::SaveFile(filename, out);
 		}
 		--num_resume_data;
 	}
@@ -638,8 +638,8 @@ inline jboolean removeTorrent(libtorrent::torrent_handle* pTorrent) {
 }
 
 inline jboolean deleteTorrent(libtorrent::torrent_handle* pTorrent) {
-	boost::filesystem::path resumeFile = pTorrent->save_path();
-	resumeFile /= (pTorrent->name() + RESUME);
+	std::string resumeFile = combine_path(gDefaultSave, combine_path(RESUME
+						, to_hex(pTorrent->info_hash().to_string()) + RESUME));
 	bool del = false;
 	solt::torrent_alert_handler alert_handler(pTorrent->info_hash(),
 			torrent_alert_handler::alert_type::torrent_deleted, 1);
@@ -667,8 +667,9 @@ inline jboolean deleteTorrent(libtorrent::torrent_handle* pTorrent) {
 		}
 	}
 //	l.unlock();
-	if (del && boost::filesystem::exists(resumeFile)) {
-		boost::filesystem::remove(resumeFile);
+	error_code ec;
+	if (del && exists(resumeFile)) {
+		remove(resumeFile, ec);
 	}
 
 	LOG_DEBUG("remove_torrent");

@@ -10,7 +10,7 @@
 #include "libtorrent/bencode.hpp"
 #include <map>
 #include "torrentinfo.h"
-
+extern std::string gDefaultSave;
 namespace solt {
 
 void torrent_alert_handler::operator()(torrent_finished_alert const& a) {
@@ -29,9 +29,9 @@ void torrent_alert_handler::operator()(save_resume_data_alert const& a) {
 		std::vector<char> out;
 		libtorrent::bencode(std::back_inserter(out),
 				*(a.resume_data));
-		boost::filesystem::path savePath = a.handle.save_path();
-		savePath /= (a.handle.name() + RESUME);
-		solt::SaveFile(savePath.string(), out);
+		std::string filename = combine_path(gDefaultSave, combine_path(RESUME
+							, to_hex(a.handle.info_hash().to_string()) + RESUME));
+		solt::SaveFile(filename, out);
 
 		if (expected_type == alert_type::save_resume_data && torrent_hash == a.handle.info_hash()) {
 			--num_alert;
@@ -111,9 +111,9 @@ bool handle_read_piece_alert(sha1_hash &torrent_hash, piece_data_queue &queue, i
 		std::vector<char> out;
 		libtorrent::bencode(std::back_inserter(out),
 				*(saveAlrt->resume_data));
-		boost::filesystem::path savePath = saveAlrt->handle.save_path();
-		savePath /= (saveAlrt->handle.name() + RESUME);
-		solt::SaveFile(savePath.string(), out);
+		std::string filename = combine_path(gDefaultSave, combine_path(RESUME
+							, to_hex(saveAlrt->handle.info_hash().to_string()) + RESUME));
+		solt::SaveFile(filename, out);
 		return false;
 	}
 	return false;
