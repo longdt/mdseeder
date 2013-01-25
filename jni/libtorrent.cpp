@@ -213,19 +213,18 @@ JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_setProxy(
 		JNIEnv *env, jobject obj, jint Type, jstring HostName, jint Port,
 		jstring UserName, jstring Password) {
 	jboolean result = JNI_FALSE;
+	int type = Type;
+	std::string hostName;
+	solt::JniToStdString(env, &hostName, HostName);
+	int port = Port;
+	std::string userName;
+	solt::JniToStdString(env, &userName, UserName);
+	std::string password;
+	solt::JniToStdString(env, &password, Password);
 	boost::unique_lock< boost::shared_mutex > lock(access);
 	try {
 		if (gSessionState) {
-			int type = Type;
 			if (type > 0) {
-				std::string hostName;
-				solt::JniToStdString(env, &hostName, HostName);
-				int port = Port;
-				std::string userName;
-				solt::JniToStdString(env, &userName, UserName);
-				std::string password;
-				solt::JniToStdString(env, &password, Password);
-
 				gProxy.type = libtorrent::proxy_settings::proxy_type(type);
 				gProxy.hostname = hostName;
 				gProxy.port = port;
@@ -297,22 +296,22 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addTorrent(
 		JNIEnv *env, jobject obj, jstring TorrentFile, jint StorageMode,
 		jboolean autoManaged) {
 	jstring result = NULL;
+	//compute contentFile
+	std::string torrentFile;
+	solt::JniToStdString(env, &torrentFile, TorrentFile);
+
+	boost::intrusive_ptr<libtorrent::torrent_info> t;
+	libtorrent::error_code ec;
+	t = new libtorrent::torrent_info(torrentFile.c_str(), ec);
+	if (ec) {
+		std::string errorMessage = ec.message();
+		LOG_ERR("%s: %s\n", torrentFile.c_str(), errorMessage.c_str());
+		return result;
+	}
+	const libtorrent::sha1_hash &hashCode = t->info_hash();
 	boost::unique_lock< boost::shared_mutex > lock(access);
 	try {
 		if (gSessionState) {
-			//compute contentFile
-			std::string torrentFile;
-			solt::JniToStdString(env, &torrentFile, TorrentFile);
-
-			boost::intrusive_ptr<libtorrent::torrent_info> t;
-			libtorrent::error_code ec;
-			t = new libtorrent::torrent_info(torrentFile.c_str(), ec);
-			if (ec) {
-				std::string errorMessage = ec.message();
-				LOG_ERR("%s: %s\n", torrentFile.c_str(), errorMessage.c_str());
-				return result;
-			}
-			const libtorrent::sha1_hash &hashCode = t->info_hash();
 			//find torrent_handle
 			std::map<libtorrent::sha1_hash, TorrentInfo*>::iterator iter =
 					gTorrents.find(hashCode);
@@ -390,22 +389,22 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addAsyncTorrent(
 		JNIEnv *env, jobject obj, jstring TorrentFile, jint StorageMode,
 		jboolean autoManaged) {
 	jstring result = NULL;
+	//compute contentFile
+	std::string torrentFile;
+	solt::JniToStdString(env, &torrentFile, TorrentFile);
+
+	boost::intrusive_ptr<libtorrent::torrent_info> t;
+	libtorrent::error_code ec;
+	t = new libtorrent::torrent_info(torrentFile.c_str(), ec);
+	if (ec) {
+		std::string errorMessage = ec.message();
+		LOG_ERR("%s: %s\n", torrentFile.c_str(), errorMessage.c_str());
+		return result;
+	}
+	const libtorrent::sha1_hash &hashCode = t->info_hash();
 	boost::unique_lock< boost::shared_mutex > lock(access);
 	try {
 		if (gSessionState) {
-			//compute contentFile
-			std::string torrentFile;
-			solt::JniToStdString(env, &torrentFile, TorrentFile);
-
-			boost::intrusive_ptr<libtorrent::torrent_info> t;
-			libtorrent::error_code ec;
-			t = new libtorrent::torrent_info(torrentFile.c_str(), ec);
-			if (ec) {
-				std::string errorMessage = ec.message();
-				LOG_ERR("%s: %s\n", torrentFile.c_str(), errorMessage.c_str());
-				return result;
-			}
-			const libtorrent::sha1_hash &hashCode = t->info_hash();
 			//find torrent_handle
 			std::map<libtorrent::sha1_hash, TorrentInfo*>::iterator iter =
 					gTorrents.find(hashCode);
