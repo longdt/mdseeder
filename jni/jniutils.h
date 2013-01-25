@@ -27,7 +27,7 @@
 #endif
 
 namespace solt {
-#define RESUME_SUFFIX ".resume"
+#define RESUME ".resume"
 
 int SaveFile(std::string const& filename, std::vector<char>& v);
 

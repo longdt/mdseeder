@@ -50,7 +50,7 @@ static jmethodID fileEntryInit = NULL;
 void gSession_init() {
 	using namespace libtorrent;
 	if (!gSession) {
-		gSession = new libtorrent::session();
+		gSession = new libtorrent::session(fingerprint("LT", LIBTORRENT_VERSION_MAJOR, LIBTORRENT_VERSION_MINOR, 0, 0), session::add_default_plugins);
 		//load session state
 		std::vector<char> in;
 		error_code ec;
@@ -128,6 +128,14 @@ JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_setSession(
 			listenPort = LISTEN_PORT_MIN + (rand() % (LISTEN_PORT_MAX - LISTEN_PORT_MIN + 1));
 		}
 		gSession->listen_on(std::make_pair(listenPort, listenPort + 10));
+		//add DHT Router
+		gSession->add_dht_router(std::make_pair(
+			std::string("router.bittorrent.com"), 6881));
+		gSession->add_dht_router(std::make_pair(
+			std::string("router.utorrent.com"), 6881));
+		gSession->add_dht_router(std::make_pair(
+			std::string("router.bitcomet.com"), 6881));
+
 		libtorrent::session_settings settings;
 		settings.user_agent = "hdplayer/" LIBTORRENT_VERSION;
 		settings.active_downloads = 20;
@@ -319,7 +327,7 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addTorrent(
 
 				boost::filesystem::path save_path = gDefaultSave;
 				std::string filename =
-						(save_path / (t->name() + RESUME_SUFFIX)).string();
+						(save_path / (t->name() + RESUME)).string();
 				std::vector<char> buf;
 				boost::system::error_code errorCode;
 				if (libtorrent::load_file(filename.c_str(), buf, errorCode)
@@ -415,7 +423,7 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addAsyncTorrent(
 
 				boost::filesystem::path save_path = gDefaultSave;
 				std::string filename =
-						(save_path / (t->name() + RESUME_SUFFIX)).string();
+						(save_path / (t->name() + RESUME)).string();
 				std::vector<char> buf;
 				boost::system::error_code errorCode;
 				if (libtorrent::load_file(filename.c_str(), buf, errorCode)
@@ -538,7 +546,7 @@ bool saveResumeData() {
 			std::vector<char> out;
 			libtorrent::bencode(std::back_inserter(out), *rd->resume_data);
 			boost::filesystem::path savePath = h.save_path();
-			savePath /= (h.name() + RESUME_SUFFIX);
+			savePath /= (h.name() + RESUME);
 			solt::SaveFile(savePath.string(), out);
 		}
 		--num_resume_data;
@@ -631,7 +639,7 @@ inline jboolean removeTorrent(libtorrent::torrent_handle* pTorrent) {
 
 inline jboolean deleteTorrent(libtorrent::torrent_handle* pTorrent) {
 	boost::filesystem::path resumeFile = pTorrent->save_path();
-	resumeFile /= (pTorrent->name() + RESUME_SUFFIX);
+	resumeFile /= (pTorrent->name() + RESUME);
 	bool del = false;
 	solt::torrent_alert_handler alert_handler(pTorrent->info_hash(),
 			torrent_alert_handler::alert_type::torrent_deleted, 1);

@@ -30,7 +30,7 @@ void torrent_alert_handler::operator()(save_resume_data_alert const& a) {
 		libtorrent::bencode(std::back_inserter(out),
 				*(a.resume_data));
 		boost::filesystem::path savePath = a.handle.save_path();
-		savePath /= (a.handle.name() + RESUME_SUFFIX);
+		savePath /= (a.handle.name() + RESUME);
 		solt::SaveFile(savePath.string(), out);
 
 		if (expected_type == alert_type::save_resume_data && torrent_hash == a.handle.info_hash()) {
@@ -112,7 +112,7 @@ bool handle_read_piece_alert(sha1_hash &torrent_hash, piece_data_queue &queue, i
 		libtorrent::bencode(std::back_inserter(out),
 				*(saveAlrt->resume_data));
 		boost::filesystem::path savePath = saveAlrt->handle.save_path();
-		savePath /= (saveAlrt->handle.name() + RESUME_SUFFIX);
+		savePath /= (saveAlrt->handle.name() + RESUME);
 		solt::SaveFile(savePath.string(), out);
 		return false;
 	}
