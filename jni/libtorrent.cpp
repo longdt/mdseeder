@@ -8,6 +8,7 @@
 #include "libtorrent/peer_id.hpp"
 #include "libtorrent/escape_string.hpp"
 #include "libtorrent/file.hpp"
+#include "libtorrent/magnet_uri.hpp"
 #include "stream.hpp"
 #include "concurrentqueue.h"
 #include "piecedataqueue.h"
@@ -385,6 +386,94 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addTorrent(
 	return result;
 }
 
+JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addMagnetUri(
+		JNIEnv *env, jobject obj, jstring MagnetUri, jint StorageMode,
+		jboolean autoManaged) {
+	jstring result = NULL;
+	//compute magnetUri
+	std::string magnetUri;
+	solt::JniToStdString(env, &magnetUri, MagnetUri);
+
+	libtorrent::error_code ec;
+	libtorrent::add_torrent_params torrentParams;
+	parse_magnet_uri(magnetUri, torrentParams, ec);
+	if (ec) {
+		std::string errorMessage = ec.message();
+		LOG_ERR("%s: %s\n", magnetUri.c_str(), errorMessage.c_str());
+		return result;
+	}
+	const libtorrent::sha1_hash &hashCode = torrentParams.info_hash;
+	boost::unique_lock< boost::shared_mutex > lock(access);
+	try {
+		if (gSessionState) {
+			//find torrent_handle
+			std::map<libtorrent::sha1_hash, TorrentInfo*>::iterator iter =
+					gTorrents.find(hashCode);
+			if (iter != gTorrents.end()) {
+				LOG_DEBUG(
+						"Torrent file already presents: %s", magnetUri.c_str());
+				char ih[41];
+				libtorrent::to_hex((char const*) &hashCode[0], 20, ih);
+				result = env->NewStringUTF(ih);
+			} else {
+				LOG_DEBUG("MagnetUri: %s", magnetUri.c_str());
+				LOG_DEBUG("StorageMode: %d\n", StorageMode);
+
+				libtorrent::lazy_entry resume_data;
+				std::string filename = combine_path(gDefaultSave, combine_path(RESUME, to_hex(hashCode.to_string()) + RESUME));
+				std::vector<char> buf;
+				boost::system::error_code errorCode;
+				if (libtorrent::load_file(filename.c_str(), buf, errorCode)
+						== 0)
+					torrentParams.resume_data = &buf;
+
+				torrentParams.url = magnetUri;
+				torrentParams.save_path = gDefaultSave;
+				torrentParams.duplicate_is_error = false;
+				torrentParams.auto_managed = false;
+				torrentParams.upload_mode = true;
+				libtorrent::storage_mode_t storageMode =
+						libtorrent::storage_mode_sparse;
+				switch (StorageMode) {
+				case 0:
+					storageMode = libtorrent::storage_mode_allocate;
+					break;
+				case 1:
+					storageMode = libtorrent::storage_mode_sparse;
+					break;
+				}
+				torrentParams.storage_mode = storageMode;
+				TorrentInfo *torrent = new TorrentInfo();
+				torrentParams.userdata = &torrent->cancel_piece_tasks;
+				torrent->handle = gSession->add_torrent(torrentParams, ec);
+				libtorrent::torrent_handle* th = &torrent->handle;
+				if (ec) {
+					std::string errorMessage = ec.message();
+					delete torrent;
+					LOG_ERR(
+							"failed to add torrent: %s\n", errorMessage.c_str());
+				} else {
+					th->piece_priority(0, 7);
+					th->set_upload_mode(false);
+					if (th->is_paused()) {
+						th->resume();
+					}
+
+					th->auto_managed(autoManaged);
+					gTorrents[hashCode] = torrent;
+					char ih[41];
+					libtorrent::to_hex((char const*) &hashCode[0], 20, ih);
+					result = env->NewStringUTF(ih);
+				}
+
+			}
+		}
+	} catch (...) {
+		LOG_ERR("Exception: failed to add torrent");
+	}
+	return result;
+}
+
 JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addAsyncTorrent(
 		JNIEnv *env, jobject obj, jstring TorrentFile, jint StorageMode,
 		jboolean autoManaged) {
@@ -431,6 +520,79 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addAsyncTorrent(
 					torrentParams.resume_data = &buf;
 
 				torrentParams.ti = t;
+				torrentParams.save_path = gDefaultSave;
+				torrentParams.duplicate_is_error = false;
+				torrentParams.auto_managed = false;
+				torrentParams.upload_mode = true;
+				libtorrent::storage_mode_t storageMode =
+						libtorrent::storage_mode_sparse;
+				switch (StorageMode) {
+				case 0:
+					storageMode = libtorrent::storage_mode_allocate;
+					break;
+				case 1:
+					storageMode = libtorrent::storage_mode_sparse;
+					break;
+				}
+				torrentParams.storage_mode = storageMode;
+				TorrentInfo *torrent = new TorrentInfo();
+				torrentParams.userdata = &torrent->cancel_piece_tasks;
+				gSession->async_add_torrent(torrentParams);
+
+				gTorrents[hashCode] = torrent;
+				char ih[41];
+				libtorrent::to_hex((char const*) &hashCode[0], 20, ih);
+				result = env->NewStringUTF(ih);
+			}
+		}
+	} catch (...) {
+		LOG_ERR("Exception: failed to add torrent");
+	}
+	return result;
+}
+
+JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addAsyncMagnetUri(
+		JNIEnv *env, jobject obj, jstring MagnetUri, jint StorageMode,
+		jboolean autoManaged) {
+	jstring result = NULL;
+	//compute magnetUri
+	std::string magnetUri;
+	solt::JniToStdString(env, &magnetUri, MagnetUri);
+
+	libtorrent::error_code ec;
+	libtorrent::add_torrent_params torrentParams;
+	parse_magnet_uri(magnetUri, torrentParams, ec);
+	if (ec) {
+		std::string errorMessage = ec.message();
+		LOG_ERR("%s: %s\n", magnetUri.c_str(), errorMessage.c_str());
+		return result;
+	}
+	const libtorrent::sha1_hash &hashCode = torrentParams.info_hash;
+	boost::unique_lock< boost::shared_mutex > lock(access);
+	try {
+		if (gSessionState) {
+			//find torrent_handle
+			std::map<libtorrent::sha1_hash, TorrentInfo*>::iterator iter =
+					gTorrents.find(hashCode);
+			if (iter != gTorrents.end()) {
+				LOG_DEBUG(
+						"Torrent file already presents: %s", magnetUri.c_str());
+				char ih[41];
+				libtorrent::to_hex((char const*) &hashCode[0], 20, ih);
+				result = env->NewStringUTF(ih);
+			} else {
+				LOG_DEBUG("MagnetUri: %s", magnetUri.c_str());
+				LOG_DEBUG("StorageMode: %d\n", StorageMode);
+
+				libtorrent::lazy_entry resume_data;
+				std::string filename = combine_path(gDefaultSave, combine_path(RESUME, to_hex(hashCode.to_string()) + RESUME));
+				std::vector<char> buf;
+				boost::system::error_code errorCode;
+				if (libtorrent::load_file(filename.c_str(), buf, errorCode)
+						== 0)
+					torrentParams.resume_data = &buf;
+
+				torrentParams.url = magnetUri;
 				torrentParams.save_path = gDefaultSave;
 				torrentParams.duplicate_is_error = false;
 				torrentParams.auto_managed = false;
