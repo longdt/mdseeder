@@ -188,9 +188,12 @@ public class LibTorrent {
 	public native String addAsyncTorrent(String torentFile, int storageMode,
 			boolean autoManaged);
 
-	// TODO implement
-	//public native String addTorrent(URI magnetLink, int storageMode,
-	//		boolean autoManaged);
+	
+	public native String addMagnetUri(String magnetLink, int storageMode,
+			boolean autoManaged);
+	
+	public native String addAsyncMagnetUri(String magnetLink, int storageMode,
+			boolean autoManaged);
 
 	// TODO implement
 	public native boolean saveResumeData();
