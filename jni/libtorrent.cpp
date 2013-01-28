@@ -720,13 +720,7 @@ JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_saveResumeData
 	boost::unique_lock< boost::shared_mutex > lock(access);
 	try {
 		if (gSessionState) {
-			if (gSession->is_paused()) {
-				result = saveResumeData();
-			} else {
-				gSession->pause();
-				result = saveResumeData();
-				gSession->resume();
-			}
+			result = saveResumeData();
 		}
 	} catch (...) {
 		LOG_ERR("Exception: failed to save resume data");
@@ -771,12 +765,12 @@ inline jboolean removeTorrent(libtorrent::torrent_handle* pTorrent) {
 		// the alert handler for save_resume_data_alert
 		// will save it to disk
 		solt::torrent_alert_handler alert_handler(pTorrent->info_hash(),
-				torrent_alert_handler::alert_type::save_resume_data, 1);
+				torrent_alert_handler::alert_type::save_resume_data);
 	//	no need alert_mutex lock here due get unique lock access
 	//	boost::mutex::scoped_lock l(alert_mutex);
 		pTorrent->save_resume_data(libtorrent::torrent_handle::save_resume_flags_t::flush_disk_cache);
 		// loop through the alert queue to see if anything has happened.
-		while (alert_handler.get_num_alert() > 0) {
+		while (!alert_handler.is_done()) {
 			libtorrent::alert const* a = gSession->wait_for_alert(
 					libtorrent::seconds(10));
 			// if we don't get an alert within 10 seconds, abort
@@ -784,11 +778,7 @@ inline jboolean removeTorrent(libtorrent::torrent_handle* pTorrent) {
 				break;
 			std::auto_ptr<libtorrent::alert> holder = gSession->pop_alert();
 			LOG_DEBUG("RemoveTorrent Alert: %s", a->message().c_str());
-			try {
-				solt::handle_remove_torrent_alert(alert_handler, a);
-			} catch (libtorrent::unhandled_alert &e) {
-
-			}
+			alert_handler.handle(a);
 		}
 	}
 	gSession->remove_torrent(*pTorrent);
@@ -800,14 +790,13 @@ inline jboolean removeTorrent(libtorrent::torrent_handle* pTorrent) {
 inline jboolean deleteTorrent(libtorrent::torrent_handle* pTorrent) {
 	std::string resumeFile = combine_path(gDefaultSave, combine_path(RESUME
 						, to_hex(pTorrent->info_hash().to_string()) + RESUME));
-	bool del = false;
 	solt::torrent_alert_handler alert_handler(pTorrent->info_hash(),
-			torrent_alert_handler::alert_type::torrent_deleted, 1);
+			torrent_alert_handler::alert_type::torrent_deleted);
 //	no need alert_mutex lock here due get unique lock access
 //	boost::mutex::scoped_lock l(alert_mutex);
 	gSession->remove_torrent(*pTorrent, libtorrent::session::delete_files);
 	// loop through the alert queue to see if anything has happened.
-	while (alert_handler.get_num_alert() > 0) {
+	while (!alert_handler.is_done() > 0) {
 		libtorrent::alert const* a = gSession->wait_for_alert(
 				libtorrent::seconds(10));
 		// if we don't get an alert within 10 seconds, abort
@@ -815,20 +804,11 @@ inline jboolean deleteTorrent(libtorrent::torrent_handle* pTorrent) {
 			break;
 		std::auto_ptr<libtorrent::alert> holder = gSession->pop_alert();
 		LOG_DEBUG("RemoveTorrent Alert: %s", a->message().c_str());
-		try {
-			solt::handle_remove_torrent_alert(alert_handler, a);
-			if (alert_handler.get_alert_type() == torrent_alert_handler::alert_type::torrent_deleted
-					&& alert_handler.get_expected_type() == 0
-					&& !alert_handler.is_error_alert()) {
-				del = true;
-			}
-		} catch (libtorrent::unhandled_alert &e) {
-
-		}
+		alert_handler.handle(a);
 	}
 //	l.unlock();
 	error_code ec;
-	if (del && exists(resumeFile)) {
+	if (alert_handler.is_done() && !alert_handler.is_error_alert() && exists(resumeFile)) {
 		remove(resumeFile, ec);
 	}
 
@@ -1160,20 +1140,22 @@ JNIEXPORT jlong JNICALL Java_com_solt_libtorrent_LibTorrent_getTorrentProgressSi
 				if (!alrt) {
 					//try pop alert from session to get read_piece_alert
 					boost::mutex::scoped_lock l(alert_mutex);
-					std::auto_ptr<libtorrent::alert> a;
-					a = gSession->pop_alert();
-					while (a.get()){
-						if (solt::handle_read_piece_alert(hash, pTorrentInfo->piece_queue, pieceIdx, a.get())) {
-							alrt = libtorrent::alert_cast<libtorrent::read_piece_alert>(a.release());
-							break;
-						}
-						a = gSession->pop_alert();
+					std::deque<alert*> alerts;
+					gSession->pop_alerts(&alerts);
+					torrent_alert_handler handler;
+					for (std::deque<alert*>::iterator i = alerts.begin()
+						, end(alerts.end()); i != end; ++i)
+					{
+						TORRENT_TRY
+						{
+							handler.handle(*i);
+						} TORRENT_CATCH(std::exception& e) {}
+						delete *i;
 					}
-				}
-
-				if (!alrt) {
+					alerts.clear();
 					return 0;
-				} else if (alrt->buffer) {
+				}
+				if (alrt->buffer) {
 					//copy data
 					result = solt::copyPieceData(env, alrt, buffer);
 				}
@@ -2407,3 +2389,28 @@ JNIEXPORT jlong JNICALL Java_com_solt_libtorrent_LibTorrent_getTorrentSize(
 }
 //-----------------------------------------------------------------------------
 
+JNIEXPORT void JNICALL Java_com_solt_libtorrent_LibTorrent_handleAlerts
+  (JNIEnv *, jobject) {
+	if (!gSessionState) {
+	  return;
+	}
+	boost::shared_lock< boost::shared_mutex > lock(access);
+	// loop through the alert queue to see if anything has happened.
+	std::deque<alert*> alerts;
+	gSession->pop_alerts(&alerts);
+	torrent_alert_handler handler;
+	for (std::deque<alert*>::iterator i = alerts.begin()
+		, end(alerts.end()); i != end; ++i)
+	{
+		TORRENT_TRY
+		{
+			if (!handler.handle(*i))
+			{
+				// if we didn't handle the alert, print it to the log
+				//log alert info
+			}
+		} TORRENT_CATCH(std::exception& e) {}
+		delete *i;
+	}
+	alerts.clear();
+}

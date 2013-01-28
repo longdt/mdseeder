@@ -725,4 +725,6 @@ public class LibTorrent {
 	 */
 	public native long getTorrentSize(String torrentFile);
 	// -----------------------------------------------------------------------------
+	
+	public native void handleAlerts();
 }

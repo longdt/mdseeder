@@ -423,6 +423,14 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_getTorrentName
 JNIEXPORT jlong JNICALL Java_com_solt_libtorrent_LibTorrent_getTorrentSize
   (JNIEnv *, jobject, jstring);
 
+/*
+ * Class:     com_solt_libtorrent_LibTorrent
+ * Method:    handleAlerts
+ * Signature: ()V
+ */
+JNIEXPORT void JNICALL Java_com_solt_libtorrent_LibTorrent_handleAlerts
+  (JNIEnv *, jobject);
+
 #ifdef __cplusplus
 }
 #endif
