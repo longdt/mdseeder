@@ -367,10 +367,11 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addTorrent(
 					int last_piece = t->num_pieces() - 1;
 					th->piece_priority(last_piece, 7);
 					th->set_upload_mode(false);
+#ifdef START_ON_ADD
 					if (th->is_paused()) {
 						th->resume();
 					}
-
+#endif
 					th->auto_managed(autoManaged);
 					gTorrents[hashCode] = torrent;
 					char ih[41];
@@ -455,10 +456,11 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addMagnetUri(
 				} else {
 					th->piece_priority(0, 7);
 					th->set_upload_mode(false);
+#ifdef START_ON_ADD
 					if (th->is_paused()) {
 						th->resume();
 					}
-
+#endif
 					th->auto_managed(autoManaged);
 					gTorrents[hashCode] = torrent;
 					char ih[41];
@@ -522,8 +524,8 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addAsyncTorrent(
 				torrentParams.ti = t;
 				torrentParams.save_path = gDefaultSave;
 				torrentParams.duplicate_is_error = false;
-				torrentParams.auto_managed = false;
-				torrentParams.upload_mode = true;
+				torrentParams.auto_managed = autoManaged;
+				torrentParams.upload_mode = false;
 				libtorrent::storage_mode_t storageMode =
 						libtorrent::storage_mode_sparse;
 				switch (StorageMode) {
@@ -595,8 +597,8 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addAsyncMagnetUri(
 				torrentParams.url = magnetUri;
 				torrentParams.save_path = gDefaultSave;
 				torrentParams.duplicate_is_error = false;
-				torrentParams.auto_managed = false;
-				torrentParams.upload_mode = true;
+				torrentParams.auto_managed = autoManaged;
+				torrentParams.upload_mode = false;
 				libtorrent::storage_mode_t storageMode =
 						libtorrent::storage_mode_sparse;
 				switch (StorageMode) {

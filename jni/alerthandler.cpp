@@ -10,8 +10,10 @@
 #include "libtorrent/bencode.hpp"
 #include <map>
 #include "torrentinfo.h"
+
 extern std::string gDefaultSave;
 using namespace libtorrent;
+
 namespace solt {
 
 bool torrent_alert_handler::handle(const alert* a) {
@@ -66,6 +68,11 @@ bool torrent_alert_handler::handle(const alert* a) {
 			TorrentInfo* pTorrentInfo = GetTorrentInfo(p->handle.info_hash());
 			if (pTorrentInfo) {
 				pTorrentInfo->handle = p->handle;
+#ifdef START_ON_ADD
+				if (p->handle.is_paused()) {
+					p->handle.resume();
+				}
+#endif
 			}
 		}
 	}
