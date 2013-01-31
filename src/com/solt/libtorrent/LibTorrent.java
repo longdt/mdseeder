@@ -7,6 +7,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
 public class LibTorrent {
 	/**
@@ -122,8 +125,15 @@ public class LibTorrent {
 			| FLAG_AUTO_MANAGED | FLAG_PAUSED | FLAG_APPLY_IP_FILTER;
 
 	private static final String LIBTORRENT_DLL = "libtorrent.dll";
+	private static final Set<String> mediaExts = new HashSet<String>();
+	
 	static {
 		loadLibraryFromJar();
+		String[] extensions = new String[] {"mp3", "mp4", "ogv", "flv", "mov", "mkv", "avi", "asf", "wmv"};
+		mediaExts.addAll(Arrays.asList(extensions));
+	}
+	
+	LibTorrent() {
 	}
 
 	private static void loadLibraryFromJar() {
@@ -136,6 +146,9 @@ public class LibTorrent {
 				OutputStream out = null;
 				try {
 					in = getClass().getResourceAsStream("/" + LIBTORRENT_DLL);
+					if (in == null) {
+						in = getClass().getResourceAsStream("/resources/" + LIBTORRENT_DLL);
+					}
 					out = new FileOutputStream(tmpFile);
 
 					byte[] buf = new byte[8192];
@@ -835,8 +848,29 @@ public class LibTorrent {
 	 * @return number bytes of torrent's data
 	 */
 	public native long getTorrentSize(String torrentFile);
-
 	// -----------------------------------------------------------------------------
-
+	
 	public native void handleAlerts();
+	
+	public int getBestStreamableFile(String hashCode) throws TorrentException {
+		FileEntry[] entries = getTorrentFiles(hashCode);
+		long maxSize = 0;
+		int index = -1;
+		for (int i = 0; i < entries.length; ++i) {
+			if (isStreamable(entries[i]) && entries[i].getSize() > maxSize) {
+				maxSize = entries[i].getSize();
+				index = i;
+			}
+		}
+		return index;
+	}
+
+	private boolean isStreamable(FileEntry entry) {
+		int index = entry.getPath().lastIndexOf('.');
+		if (index != -1) {
+			String extension = entry.getPath().substring(index + 1).toLowerCase();
+			return mediaExts.contains(extension);
+		}
+		return false;
+	}
 }
