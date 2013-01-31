@@ -295,7 +295,7 @@ JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_setSessionOptions
 //2-storage_mode_compact
 JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addTorrent(
 		JNIEnv *env, jobject obj, jstring TorrentFile, jint StorageMode,
-		jboolean autoManaged) {
+		jint flags) {
 	jstring result = NULL;
 	//compute contentFile
 	std::string torrentFile;
@@ -339,9 +339,7 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addTorrent(
 
 				torrentParams.ti = t;
 				torrentParams.save_path = gDefaultSave;
-				torrentParams.duplicate_is_error = false;
-				torrentParams.auto_managed = false;
-				torrentParams.upload_mode = true;
+				torrentParams.flags = flags;
 				libtorrent::storage_mode_t storageMode =
 						libtorrent::storage_mode_sparse;
 				switch (StorageMode) {
@@ -366,13 +364,11 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addTorrent(
 					th->piece_priority(0, 7);
 					int last_piece = t->num_pieces() - 1;
 					th->piece_priority(last_piece, 7);
-					th->set_upload_mode(false);
 #ifdef START_ON_ADD
 					if (th->is_paused()) {
 						th->resume();
 					}
 #endif
-					th->auto_managed(autoManaged);
 					gTorrents[hashCode] = torrent;
 					char ih[41];
 					libtorrent::to_hex((char const*) &hashCode[0], 20, ih);
@@ -389,7 +385,7 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addTorrent(
 
 JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addMagnetUri(
 		JNIEnv *env, jobject obj, jstring MagnetUri, jint StorageMode,
-		jboolean autoManaged) {
+		jint flags) {
 	jstring result = NULL;
 	//compute magnetUri
 	std::string magnetUri;
@@ -430,9 +426,7 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addMagnetUri(
 
 				torrentParams.url = magnetUri;
 				torrentParams.save_path = gDefaultSave;
-				torrentParams.duplicate_is_error = false;
-				torrentParams.auto_managed = false;
-				torrentParams.upload_mode = true;
+				torrentParams.flags = flags;
 				libtorrent::storage_mode_t storageMode =
 						libtorrent::storage_mode_sparse;
 				switch (StorageMode) {
@@ -455,13 +449,11 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addMagnetUri(
 							"failed to add torrent: %s\n", errorMessage.c_str());
 				} else {
 					th->piece_priority(0, 7);
-					th->set_upload_mode(false);
 #ifdef START_ON_ADD
 					if (th->is_paused()) {
 						th->resume();
 					}
 #endif
-					th->auto_managed(autoManaged);
 					gTorrents[hashCode] = torrent;
 					char ih[41];
 					libtorrent::to_hex((char const*) &hashCode[0], 20, ih);
@@ -478,7 +470,7 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addMagnetUri(
 
 JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addAsyncTorrent(
 		JNIEnv *env, jobject obj, jstring TorrentFile, jint StorageMode,
-		jboolean autoManaged) {
+		jint flags) {
 	jstring result = NULL;
 	//compute contentFile
 	std::string torrentFile;
@@ -523,9 +515,7 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addAsyncTorrent(
 
 				torrentParams.ti = t;
 				torrentParams.save_path = gDefaultSave;
-				torrentParams.duplicate_is_error = false;
-				torrentParams.auto_managed = autoManaged;
-				torrentParams.upload_mode = false;
+				torrentParams.flags = flags;
 				libtorrent::storage_mode_t storageMode =
 						libtorrent::storage_mode_sparse;
 				switch (StorageMode) {
@@ -555,7 +545,7 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addAsyncTorrent(
 
 JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addAsyncMagnetUri(
 		JNIEnv *env, jobject obj, jstring MagnetUri, jint StorageMode,
-		jboolean autoManaged) {
+		jint flags) {
 	jstring result = NULL;
 	//compute magnetUri
 	std::string magnetUri;
@@ -596,9 +586,7 @@ JNIEXPORT jstring JNICALL Java_com_solt_libtorrent_LibTorrent_addAsyncMagnetUri(
 
 				torrentParams.url = magnetUri;
 				torrentParams.save_path = gDefaultSave;
-				torrentParams.duplicate_is_error = false;
-				torrentParams.auto_managed = autoManaged;
-				torrentParams.upload_mode = false;
+				torrentParams.flags = flags;
 				libtorrent::storage_mode_t storageMode =
 						libtorrent::storage_mode_sparse;
 				switch (StorageMode) {

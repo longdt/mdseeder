@@ -27,10 +27,11 @@ public class Test {
 		System.out.println(Charset.defaultCharset());
 		final LibTorrent libTorrent = new LibTorrent();
 		
-		libTorrent.setSession(0, "./", 100 * 1024, 0 * 1024);
+		libTorrent.setSession(0, "D:\\.mediacache", 100 * 1024, 0 * 1024);
 		libTorrent.setSessionOptions(true, true, true, true);
 		final NanoHTTPD httpd = new NanoHTTPD(18008, new File("./"), libTorrent);
-		String torrentFile = "Tranformers.2007.720p.Soha.mp4.torrent";
+		String torrentFile = "magnet:?xt=urn:btih:55E4841CE7A176DC4E0888E172EFC053314A4A69&xl=2160066560&dn=Safe.2012.720p.BRRip.x264.AC3-JYK&tr=udp%3A%2F%2Ftracker.openbittorrent.com%3A80&tr=udp%3A%2F%2Ftracker.publicbt.com%3A80&tr=udp%3A%2F%2Ftracker.ccc.de%3A80&tr=udp%3A%2F%2Ftracker.istole.it%3A80&tr=http%3A%2F%2Ftracker.torrentbay.to%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.istole.it%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.publicbt.com%2Fannounce&tr=http%3A%2F%2Ftracker.openbittorrent.com%2Fannounce&tr=http%3A%2F%2Ftracker.torrent.to%3A2710%2Fannounce&tr=http%3A%2F%2Finferno.demonoid.com%3A3402%2Fannounce&tr=http%3A%2F%2Ffr33dom.h33t.com%3A3310%2Fannounce&tr=http%3A%2F%2Fexodus.desync.com%3A6969%2Fannounce";
+//		String torrentFile = "Tranformers.2007.720p.Soha.mp4.torrent";
 		if (args.length > 0 && !args[0].trim().isEmpty()) {
 			torrentFile = args[0].trim();
 		}
@@ -41,8 +42,9 @@ public class Test {
 				torrents.put(libTorrent.addAsyncTorrent(f, 0), f);
 			}
 		}
-		final String hashCode = libTorrent.addAsyncTorrent(torrentFile, 0);
-		libTorrent.setAutoManaged(hashCode, false);
+		final String hashCode = libTorrent.addAsyncMagnetUri(torrentFile, 0, LibTorrent.DEFAULT_FLAGS);
+		torrents.put(hashCode, torrentFile);
+//		libTorrent.setAutoManaged(hashCode, false);
 		libTorrent.resumeTorrent(hashCode);
 		libTorrent.setUploadMode(hashCode, false);
 //		libTorrent.setTorrentDownloadLimit(hashCode, 1024 * 1024);
@@ -52,13 +54,15 @@ public class Test {
 		
 		int state = libTorrent.getTorrentState(hashCode);
 		while (state == 7 || state == 1) {
+			libTorrent.handleAlerts();
 			System.out.println("state:" + state + " size: " + libTorrent.getTorrentProgressSize(hashCode, 1));
 			Thread.sleep(1000);
 			state = libTorrent.getTorrentState(hashCode);
+			
 		}
 
 		System.out.println("state:" + state);
-
+		libTorrent.resumeTorrent(hashCode);
 		Thread shutdowner = new Thread("shutdowner") {
 			@Override
 			public void run() {
@@ -67,11 +71,18 @@ public class Test {
 					while ((c = System.in.read()) != 'q') {
 						if (c == 's') {
 							System.out.println(libTorrent.getSessionStatusText() + "\n" + libTorrent.getTorrentStatusText(hashCode));
+							libTorrent.saveResumeData();
 						} else if (c == 't') {
 							for (Entry<String, String> entry : torrents.entrySet()) {
 								String t = entry.getKey();
 								System.out.println(libTorrent.getTorrentProgress(t) + "\t" + t + "\t" + libTorrent.getTorrentState(t) + "\t" + libTorrent.getTorrentDownloadRate(t, true) + "\t" + libTorrent.getTorrentName(t) + "\t" + entry.getValue());
 							}
+						} else if (c == 'p') {
+							libTorrent.pauseTorrent(hashCode);
+							System.out.println("paused");
+						} else if (c == 'o') {
+							libTorrent.resumeTorrent(hashCode);
+							System.out.println("resumed");
 						}
 					}
 					shutdown = true;
@@ -99,11 +110,8 @@ public class Test {
 				System.out.println();
 			}
 			Thread.sleep(1000);
+			libTorrent.handleAlerts();
 			++counter;
-			if (counter == 600) {
-				libTorrent.saveResumeData();
-				counter = 0;
-			}
 		}
 		System.out.println(libTorrent.getTorrentStatusText(hashCode));
 		System.out.println("start remove torrent");

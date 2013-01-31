@@ -5,11 +5,22 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.URI;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 
 public class LibTorrent {
+	public static final int FLAG_SEED_MODE = 0x001;
+	public static final int	FLAG_OVERRIDE_RESUME_DATA = 0x002;
+	public static final int	FLAG_UPLOAD_MODE = 0x004;
+	public static final int	FLAG_SHARE_MODE = 0x008;
+	public static final int	FLAG_APPLY_IP_FILTER = 0x010;
+	public static final int	FLAG_PAUSED = 0x020;
+	public static final int	FLAG_AUTO_MANAGED = 0x040;
+	public static final int	FLAG_DUPLICATE_IS_ERROR = 0x080;
+	public static final int	FLAG_MERGE_RESUME_TRACKERS = 0x100;
+	public static final int	FLAG_UPDATE_SUBSCRIBE = 0x200;
+	public static final int	DEFAULT_FLAGS = FLAG_UPDATE_SUBSCRIBE | FLAG_AUTO_MANAGED | FLAG_PAUSED | FLAG_APPLY_IP_FILTER;
+
 	private static final String LIBTORRENT_DLL = "libtorrent.dll";
 	static {
 		loadLibraryFromJar();
@@ -161,7 +172,7 @@ public class LibTorrent {
 	 * @return hashCode of added torrent or <code>null</code> if error occurs
 	 */
 	public String addTorrent(String torentFile, int storageMode) {
-		return addTorrent(torentFile, storageMode, true);
+		return addTorrent(torentFile, storageMode, DEFAULT_FLAGS);
 	}
 
 	/**
@@ -179,21 +190,21 @@ public class LibTorrent {
 	 * @return hashCode of added torrent or <code>null</code> if error occurs
 	 */
 	public native String addTorrent(String torentFile, int storageMode,
-			boolean autoManaged);
+			int flags);
 	
 	public String addAsyncTorrent(String torentFile, int storageMode) {
-		return addAsyncTorrent(torentFile, storageMode, true);
+		return addAsyncTorrent(torentFile, storageMode, DEFAULT_FLAGS);
 	}
 	
 	public native String addAsyncTorrent(String torentFile, int storageMode,
-			boolean autoManaged);
+			int flags);
 
 	
 	public native String addMagnetUri(String magnetLink, int storageMode,
-			boolean autoManaged);
+			int flags);
 	
 	public native String addAsyncMagnetUri(String magnetLink, int storageMode,
-			boolean autoManaged);
+			int flags);
 
 	// TODO implement
 	public native boolean saveResumeData();
