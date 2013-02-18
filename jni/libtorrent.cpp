@@ -60,7 +60,9 @@ inline void gSession_init() {
 		error_code ec;
 		if (load_file(filename, in, ec) == 0) {
 			lazy_entry e;
-			if (lazy_bdecode(&in[0], &in[0] + in.size(), e) == 0)
+			error_code ec;
+			int pos;
+			if (lazy_bdecode(&in[0], &in[0] + in.size(), e, ec, &pos) == 0)
 				gSession->load_state(e);
 		}
 	}
@@ -120,8 +122,9 @@ JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_setSession(
 		// create directory for resume files
 		error_code ec;
 		create_directory(combine_path(gDefaultSave, RESUME), ec);
-		if (ec)
-			fprintf(stderr, "failed to create resume file directory: %s\n", ec.message().c_str());
+		if (ec) {
+			LOG_ERR("failed to create resume file directory: %s", ec.message().c_str());
+		}
 		gSession_init();
 		gSession->set_alert_mask(
 				libtorrent::alert::error_notification
@@ -134,7 +137,11 @@ JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_setSession(
 			srand((unsigned int) time(NULL));
 			listenPort = LISTEN_PORT_MIN + (rand() % (LISTEN_PORT_MAX - LISTEN_PORT_MIN + 1));
 		}
-		gSession->listen_on(std::make_pair(listenPort, listenPort + 10));
+		gSession->listen_on(std::make_pair(listenPort, listenPort + 10), ec);
+		if (ec) {
+			LOG_ERR("failed to listen on ports %d-%d: %s",
+					listenPort, listenPort+10, ec.message().c_str());
+		}
 		//add DHT Router
 		gSession->add_dht_router(std::make_pair(
 			std::string("router.bittorrent.com"), 6881));
@@ -1421,6 +1428,103 @@ JNIEXPORT jint JNICALL Java_com_solt_libtorrent_LibTorrent_getTorrentDownloadRat
 		}
 	}
 }
+
+ JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_isUploadMode
+   (JNIEnv *env, jobject obj, jstring hashCode) {
+	HASH_ASSERT(env, hashCode, JNI_FALSE);
+	libtorrent::sha1_hash hash;
+	solt::JStringToHash(env, hash, hashCode);
+	TorrentInfo *pTorrentInfo = NULL;
+	try {
+		if (gSessionState) {
+			boost::shared_lock< boost::shared_mutex > lock(access);
+			pTorrentInfo = GetTorrentInfo(env, hash);
+			if (pTorrentInfo) {
+				libtorrent::torrent_handle* pTorrent = &pTorrentInfo->handle;
+				libtorrent::torrent_status t_s = pTorrent->status(0);
+				return t_s.upload_mode ? JNI_TRUE : JNI_FALSE;
+			}
+		}
+	} catch (...) {
+		LOG_ERR("Exception: failed to check upload mode");
+		try {
+			boost::unique_lock< boost::shared_mutex > lock(access);
+			if (pTorrentInfo != NULL && gTorrents.erase(hash) > 0) {
+				delete pTorrentInfo;
+			}
+		} catch (...) {
+		}
+	}
+	return JNI_FALSE;
+ }
+
+ /*
+  * Class:     com_solt_libtorrent_LibTorrent
+  * Method:    setShareMode
+  * Signature: (Ljava/lang/String;Z)V
+  */
+ JNIEXPORT void JNICALL Java_com_solt_libtorrent_LibTorrent_setShareMode
+   (JNIEnv *env, jobject obj, jstring hashCode, jboolean shareMode) {
+	HASH_ASSERT(env, hashCode, RETURN_VOID);
+	libtorrent::sha1_hash hash;
+	solt::JStringToHash(env, hash, hashCode);
+	TorrentInfo *pTorrentInfo = NULL;
+	try {
+		if (gSessionState) {
+			boost::shared_lock< boost::shared_mutex > lock(access);
+			pTorrentInfo = GetTorrentInfo(env, hash);
+			if (pTorrentInfo) {
+				libtorrent::torrent_handle* pTorrent = &pTorrentInfo->handle;
+				LOG_DEBUG(
+						"set share mode torrent name %s", pTorrent->name().c_str());
+				pTorrent->set_share_mode(shareMode);
+			}
+		}
+	} catch (...) {
+		LOG_ERR("Exception: failed to set share mode torrent");
+		try {
+			boost::unique_lock< boost::shared_mutex > lock(access);
+			if (pTorrentInfo != NULL && gTorrents.erase(hash) > 0) {
+				delete pTorrentInfo;
+			}
+		} catch (...) {
+		}
+	}
+ }
+
+ /*
+  * Class:     com_solt_libtorrent_LibTorrent
+  * Method:    isShareMode
+  * Signature: (Ljava/lang/String;)Z
+  */
+ JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_isShareMode
+   (JNIEnv *env, jobject obj, jstring hashCode) {
+	HASH_ASSERT(env, hashCode, JNI_FALSE);
+	libtorrent::sha1_hash hash;
+	solt::JStringToHash(env, hash, hashCode);
+	TorrentInfo *pTorrentInfo = NULL;
+	try {
+		if (gSessionState) {
+			boost::shared_lock< boost::shared_mutex > lock(access);
+			pTorrentInfo = GetTorrentInfo(env, hash);
+			if (pTorrentInfo) {
+				libtorrent::torrent_handle* pTorrent = &pTorrentInfo->handle;
+				libtorrent::torrent_status t_s = pTorrent->status(0);
+				return t_s.share_mode ? JNI_TRUE : JNI_FALSE;
+			}
+		}
+	} catch (...) {
+		LOG_ERR("Exception: failed to check share mode");
+		try {
+			boost::unique_lock< boost::shared_mutex > lock(access);
+			if (pTorrentInfo != NULL && gTorrents.erase(hash) > 0) {
+				delete pTorrentInfo;
+			}
+		} catch (...) {
+		}
+	}
+	return JNI_FALSE;
+ }
 
 /*
  * Class:     com_solt_libtorrent_LibTorrent

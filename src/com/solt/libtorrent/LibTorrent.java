@@ -570,6 +570,14 @@ public class LibTorrent {
 	public native void setUploadMode(String hashCode, boolean mode)
 			throws TorrentException;
 
+	
+	public native boolean isUploadMode(String hashCode) throws TorrentException;
+	
+	public native void setShareMode(String hashCode, boolean mode)
+			throws TorrentException;
+	
+	public native boolean isShareMode(String hashcode) throws TorrentException;
+	
 	/**
 	 * test if a torrent is in auto managed mode
 	 * 

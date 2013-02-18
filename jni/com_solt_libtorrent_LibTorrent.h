@@ -263,6 +263,30 @@ JNIEXPORT void JNICALL Java_com_solt_libtorrent_LibTorrent_setUploadMode
 
 /*
  * Class:     com_solt_libtorrent_LibTorrent
+ * Method:    isUploadMode
+ * Signature: (Ljava/lang/String;)Z
+ */
+JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_isUploadMode
+  (JNIEnv *, jobject, jstring);
+
+/*
+ * Class:     com_solt_libtorrent_LibTorrent
+ * Method:    setShareMode
+ * Signature: (Ljava/lang/String;Z)V
+ */
+JNIEXPORT void JNICALL Java_com_solt_libtorrent_LibTorrent_setShareMode
+  (JNIEnv *, jobject, jstring, jboolean);
+
+/*
+ * Class:     com_solt_libtorrent_LibTorrent
+ * Method:    isShareMode
+ * Signature: (Ljava/lang/String;)Z
+ */
+JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_isShareMode
+  (JNIEnv *, jobject, jstring);
+
+/*
+ * Class:     com_solt_libtorrent_LibTorrent
  * Method:    isAutoManaged
  * Signature: (Ljava/lang/String;)Z
  */
