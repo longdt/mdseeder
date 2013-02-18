@@ -18,7 +18,7 @@
  * 8 Allee Lenotre, La Grille Royale, 78600 Le Mesnil le Roi, France.
  *
  */
-package com.solt.util.average;
+package com.solt.media.util;
 
 /**
  * 
