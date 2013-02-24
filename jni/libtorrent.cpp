@@ -15,7 +15,6 @@
 #include "jniutils.h"
 #include "alerthandler.h"
 #include "torrentinfo.h"
-#include <boost/filesystem.hpp>
 
 using solt::torrent_alert_handler;
 using namespace libtorrent;
@@ -81,6 +80,7 @@ inline void gSession_del(bool saveState) {
 		}
 		//delete session
 		delete gSession;
+		//session_proxy proxy = gSession->abort();
 		gSession = NULL;
 	}
 }
@@ -121,8 +121,6 @@ JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_setSession(
 	boost::unique_lock< boost::shared_mutex > lock(access);
 	try {
 		solt::JniToStdString(env, &gDefaultSave, SavePath);
-		boost::filesystem::path save = boost::filesystem::canonical(boost::filesystem::path(gDefaultSave));
-		gDefaultSave = save.string();
 		// create directory for resume files
 		error_code ec;
 		create_directory(combine_path(gDefaultSave, RESUME), ec);
@@ -741,7 +739,6 @@ JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_abortSession(
 		if (gSessionState) {
 			gSession->pause();
 			saveResumeData();
-			gSession->abort();
 			gSession_del();
 			//free gTorrents
 			for (std::map<libtorrent::sha1_hash, TorrentInfo*>::iterator iter = gTorrents.begin(); iter != gTorrents.end(); ++iter) {
