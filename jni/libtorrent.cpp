@@ -103,9 +103,13 @@ TorrentInfo* GetTorrentInfo(JNIEnv *env, libtorrent::sha1_hash &hash) {
 			gTorrents.find(hash);
 	if (iter != gTorrents.end()) {
 		result = iter->second;
-	} else {
+	} else if (torrentException) {
 		env->ThrowNew(torrentException,
 								"Exception: torrent handle not found");
+	} else {
+		env->ThrowNew(env->FindClass(
+				"com/solt/libtorrent/TorrentException"),
+										"Exception: torrent handle not found");
 	}
 	return result;
 }
@@ -739,7 +743,20 @@ JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_abortSession(
 			saveResumeData();
 			gSession->abort();
 			gSession_del();
-			//free partialpieceinfo class and constructor (dont need)
+			//free gTorrents
+			for (std::map<libtorrent::sha1_hash, TorrentInfo*>::iterator iter = gTorrents.begin(); iter != gTorrents.end(); ++iter) {
+				delete iter->second;
+			}
+			gTorrents.clear();
+			//free partialpieceinfo class and constructor (need)
+			env->DeleteGlobalRef(partialPiece);
+			partialPiece = NULL;
+			partialPieceInit = NULL;
+			env->DeleteGlobalRef(torrentException);
+			torrentException = NULL;
+			env->DeleteGlobalRef(fileEntry);
+			fileEntry = NULL;
+			fileEntryInit = NULL;
 		}
 	} catch (...) {
 		LOG_ERR("Exception: failed to abort session");
@@ -793,7 +810,7 @@ inline jboolean deleteTorrent(libtorrent::torrent_handle* pTorrent) {
 //	boost::mutex::scoped_lock l(alert_mutex);
 	gSession->remove_torrent(*pTorrent, libtorrent::session::delete_files);
 	// loop through the alert queue to see if anything has happened.
-	while (!alert_handler.is_done() > 0) {
+	while (!alert_handler.is_done()) {
 		libtorrent::alert const* a = gSession->wait_for_alert(
 				libtorrent::seconds(10));
 		// if we don't get an alert within 10 seconds, abort
