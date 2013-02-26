@@ -1118,7 +1118,9 @@ JNIEXPORT jlong JNICALL Java_com_solt_libtorrent_LibTorrent_getTorrentProgressSi
 			boost::shared_lock< boost::shared_mutex > lock(access);
 			pTorrentInfo = GetTorrentInfo(env, hash);
 			if (pTorrentInfo && pieceIdx < pTorrentInfo->handle.get_torrent_info().num_pieces()) {
-				pTorrentInfo->handle.read_piece(pieceIdx);
+				if (pTorrentInfo->piece_queue.set_read(pieceIdx)) {
+					pTorrentInfo->handle.read_piece(pieceIdx);
+				}
 			}
 		}
 	} catch (...) {
