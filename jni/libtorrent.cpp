@@ -1151,7 +1151,8 @@ JNIEXPORT jlong JNICALL Java_com_solt_libtorrent_LibTorrent_getTorrentProgressSi
 			boost::shared_lock< boost::shared_mutex > lock(access);
 			pTorrentInfo = GetTorrentInfo(env, hash);
 			if (pTorrentInfo) {
-				libtorrent::read_piece_alert* alrt = pTorrentInfo->piece_queue.pop(pieceIdx);
+				bool is_remove = false;
+				libtorrent::read_piece_alert* alrt = pTorrentInfo->piece_queue.pop(pieceIdx, is_remove);
 				if (!alrt) {
 					//try pop alert from session to get read_piece_alert
 					boost::mutex::scoped_lock l(alert_mutex);
@@ -1174,7 +1175,9 @@ JNIEXPORT jlong JNICALL Java_com_solt_libtorrent_LibTorrent_getTorrentProgressSi
 					//copy data
 					result = solt::copyPieceData(env, alrt, buffer);
 				}
-				delete alrt;
+				if (is_remove) {
+					delete alrt;
+				}
 			}
 		}
 	} catch (...) {
