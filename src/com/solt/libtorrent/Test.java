@@ -25,7 +25,7 @@ public class Test {
 		System.out.println(Charset.defaultCharset());
 		final LibTorrent libTorrent = new LibTorrent();
 		
-		libTorrent.setSession(0, "D:\\.mediacache", 100 * 1024, 0 * 1024);
+		libTorrent.setSession(0, new File("D:\\.mediacache"), 100 * 1024, 0 * 1024);
 		libTorrent.setSessionOptions(true, true, true, true);
 //		final NanoHTTPD httpd = new NanoHTTPD(18008, new File("./"), libTorrent);
 		String torrentFile = "magnet:?xt=urn:btih:55E4841CE7A176DC4E0888E172EFC053314A4A69&xl=2160066560&dn=Safe.2012.720p.BRRip.x264.AC3-JYK&tr=udp%3A%2F%2Ftracker.openbittorrent.com%3A80&tr=udp%3A%2F%2Ftracker.publicbt.com%3A80&tr=udp%3A%2F%2Ftracker.ccc.de%3A80&tr=udp%3A%2F%2Ftracker.istole.it%3A80&tr=http%3A%2F%2Ftracker.torrentbay.to%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.istole.it%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.publicbt.com%2Fannounce&tr=http%3A%2F%2Ftracker.openbittorrent.com%2Fannounce&tr=http%3A%2F%2Ftracker.torrent.to%3A2710%2Fannounce&tr=http%3A%2F%2Finferno.demonoid.com%3A3402%2Fannounce&tr=http%3A%2F%2Ffr33dom.h33t.com%3A3310%2Fannounce&tr=http%3A%2F%2Fexodus.desync.com%3A6969%2Fannounce";
@@ -143,19 +143,4 @@ public class Test {
 		return builder.toString();
 	}
 
-}
-
-class PieceInfoComparator implements Comparator<PartialPieceInfo> {
-
-	@Override
-	public int compare(PartialPieceInfo o1, PartialPieceInfo o2) {
-		if (o1.getPieceIdx() < o2.getPieceIdx()) {
-			return -1;
-		} else if (o1.getPieceIdx() > o2.getPieceIdx()) {
-			return 1;
-		} else {
-			return 0;
-		}
-	}
-	
 }
