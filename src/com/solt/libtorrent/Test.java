@@ -28,19 +28,19 @@ public class Test {
 		libTorrent.setSession(0, new File("D:\\.mediacache"), 100 * 1024, 0 * 1024);
 		libTorrent.setSessionOptions(true, true, true, true);
 //		final NanoHTTPD httpd = new NanoHTTPD(18008, new File("./"), libTorrent);
-		String torrentFile = "magnet:?xt=urn:btih:55E4841CE7A176DC4E0888E172EFC053314A4A69&xl=2160066560&dn=Safe.2012.720p.BRRip.x264.AC3-JYK&tr=udp%3A%2F%2Ftracker.openbittorrent.com%3A80&tr=udp%3A%2F%2Ftracker.publicbt.com%3A80&tr=udp%3A%2F%2Ftracker.ccc.de%3A80&tr=udp%3A%2F%2Ftracker.istole.it%3A80&tr=http%3A%2F%2Ftracker.torrentbay.to%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.istole.it%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.publicbt.com%2Fannounce&tr=http%3A%2F%2Ftracker.openbittorrent.com%2Fannounce&tr=http%3A%2F%2Ftracker.torrent.to%3A2710%2Fannounce&tr=http%3A%2F%2Finferno.demonoid.com%3A3402%2Fannounce&tr=http%3A%2F%2Ffr33dom.h33t.com%3A3310%2Fannounce&tr=http%3A%2F%2Fexodus.desync.com%3A6969%2Fannounce";
-//		String torrentFile = "Tranformers.2007.720p.Soha.mp4.torrent";
+//		String torrentFile = "magnet:?xt=urn:btih:55E4841CE7A176DC4E0888E172EFC053314A4A69&xl=2160066560&dn=Safe.2012.720p.BRRip.x264.AC3-JYK&tr=udp%3A%2F%2Ftracker.openbittorrent.com%3A80&tr=udp%3A%2F%2Ftracker.publicbt.com%3A80&tr=udp%3A%2F%2Ftracker.ccc.de%3A80&tr=udp%3A%2F%2Ftracker.istole.it%3A80&tr=http%3A%2F%2Ftracker.torrentbay.to%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.istole.it%3A6969%2Fannounce&tr=http%3A%2F%2Ftracker.publicbt.com%2Fannounce&tr=http%3A%2F%2Ftracker.openbittorrent.com%2Fannounce&tr=http%3A%2F%2Ftracker.torrent.to%3A2710%2Fannounce&tr=http%3A%2F%2Finferno.demonoid.com%3A3402%2Fannounce&tr=http%3A%2F%2Ffr33dom.h33t.com%3A3310%2Fannounce&tr=http%3A%2F%2Fexodus.desync.com%3A6969%2Fannounce";
+		String torrentFile = "Tranformers.2007.720p.Soha.mp4.torrent";
 		if (args.length > 0 && !args[0].trim().isEmpty()) {
 			torrentFile = args[0].trim();
 		}
 		final Map<String, String> torrents = new HashMap<>();
-		File dir = new File(".");
-		for (String f : dir.list()) {
-			if (f.endsWith(".torrent")) {
-				torrents.put(libTorrent.addAsyncTorrent(f, 0), f);
-			}
-		}
-		final String hashCode = libTorrent.addAsyncMagnetUri(torrentFile, 0, LibTorrent.DEFAULT_FLAGS);
+//		File dir = new File(".");
+//		for (String f : dir.list()) {
+//			if (f.endsWith(".torrent")) {
+//				torrents.put(libTorrent.addAsyncTorrent(f, 0), f);
+//			}
+//		}
+		final String hashCode = libTorrent.addTorrent(torrentFile, 0, LibTorrent.DEFAULT_FLAGS);
 		torrents.put(hashCode, torrentFile);
 //		libTorrent.setAutoManaged(hashCode, false);
 		libTorrent.resumeTorrent(hashCode);
@@ -96,6 +96,7 @@ public class Test {
 		shutdowner.start();
 		PieceInfoComparator comparator = new PieceInfoComparator();
 		int counter = 0;
+		PiecesState pState = new PiecesState(hashCode, 0, 1000);
 		while (!shutdown) {
 			System.out.println(" size: " + libTorrent.getTorrentProgressSize(hashCode, 0) + " speed: " + libTorrent.getTorrentDownloadRate(hashCode, true));
 			PartialPieceInfo[] infos = libTorrent.getPieceDownloadQueue(hashCode);
@@ -107,7 +108,12 @@ public class Test {
 				}
 				System.out.println();
 			}
+			libTorrent.getPieceState(pState);
+			System.out.println("incomplete: " + libTorrent.getFirstPieceIncomplete(hashCode, 0) + "\t" + pState.getFirstIncomplete());
+			libTorrent.setPieceDeadline(hashCode, pState.getFirstIncomplete(), 100);
+			
 			Thread.sleep(1000);
+			
 			libTorrent.handleAlerts();
 			++counter;
 		}

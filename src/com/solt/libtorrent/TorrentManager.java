@@ -15,6 +15,7 @@ import org.apache.log4j.Logger;
 import com.solt.libtorrent.policy.CachePolicy;
 import com.solt.libtorrent.policy.CachePolicyFactory;
 import com.solt.media.config.ConfigurationManager;
+import com.solt.media.stream.HttpHandler;
 import com.solt.media.stream.NanoHTTPD;
 import com.solt.media.util.Constants;
 import com.solt.media.util.FileUtils;
@@ -41,6 +42,7 @@ public class TorrentManager {
 		File root = new File(wwwRoot);
 		httpd = new NanoHTTPD(HTTPD_PORT, root, libTorrent);
 		libTorrent.setSession(port, root, 0, 0);
+		libTorrent.setSessionOptions(true, true, true, true);
 		loadAsyncExistTorrents();
 	}
 
@@ -50,7 +52,7 @@ public class TorrentManager {
 	private void loadAsyncExistTorrents() {
 		String hashCode = null;
 		String magnet = null;
-		int flags = LibTorrent.FLAG_OVERRIDE_RESUME_DATA;
+		int flags = LibTorrent.FLAG_OVERRIDE_RESUME_DATA | LibTorrent.FLAG_SHARE_MODE;
 		for (File torrent : torrentsDir.listFiles()) {
 			if (torrent.isDirectory()) {
 				continue;
@@ -137,8 +139,8 @@ public class TorrentManager {
 					FileUtils.copyFile(torrentFile, new File(torrentsDir,
 							hashCode + Constants.TORRENT_FILE_EXTENSION));
 				}
-				return "http://127.0.0.1:" + HTTPD_PORT + NanoHTTPD.ACTION_STREAM
-						+ "?" + NanoHTTPD.PARAM_HASHCODE + "=" + hashCode;
+				return "http://127.0.0.1:" + HTTPD_PORT + HttpHandler.ACTION_STREAM
+						+ "?" + HttpHandler.PARAM_HASHCODE + "=" + hashCode;
 			}
 		} catch (TorrentException e) {
 			e.printStackTrace();
@@ -163,8 +165,8 @@ public class TorrentManager {
 				} else if (!existFile) {
 					torrentFile.renameTo(new File(torrentsDir, hashCode + Constants.TORRENT_FILE_EXTENSION));
 				}
-				return "http://127.0.0.1:" + HTTPD_PORT + NanoHTTPD.ACTION_STREAM
-						+ "?" + NanoHTTPD.PARAM_HASHCODE + "=" + hashCode;
+				return "http://127.0.0.1:" + HTTPD_PORT + HttpHandler.ACTION_STREAM
+						+ "?" + HttpHandler.PARAM_HASHCODE + "=" + hashCode;
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -187,8 +189,8 @@ public class TorrentManager {
 							hashCode + Constants.MAGNET_FILE_EXTENSION), magnetUri.toString());
 					policy.prepare(hashCode);
 				}
-				return "http://127.0.0.1:" + HTTPD_PORT + NanoHTTPD.ACTION_STREAM
-						+ "?" + NanoHTTPD.PARAM_HASHCODE + "=" + hashCode;
+				return "http://127.0.0.1:" + HTTPD_PORT + HttpHandler.ACTION_STREAM
+						+ "?" + HttpHandler.PARAM_HASHCODE + "=" + hashCode;
 			}
 		} catch (TorrentException e) {
 			e.printStackTrace();
@@ -198,8 +200,8 @@ public class TorrentManager {
 	
 	public String getMediaUrl(String hashCode) {
 		if (contains(hashCode)) {
-			return "http://127.0.0.1:" + HTTPD_PORT + NanoHTTPD.ACTION_STREAM
-					+ "?" + NanoHTTPD.PARAM_HASHCODE + "=" + hashCode;
+			return "http://127.0.0.1:" + HTTPD_PORT + HttpHandler.ACTION_STREAM
+					+ "?" + HttpHandler.PARAM_HASHCODE + "=" + hashCode;
 		}
 		return null;
 	}
@@ -242,7 +244,7 @@ public class TorrentManager {
 	 * @throws MalformedURLException 
 	 */
 	public static void requestAddTorrent(String hashCode) throws MalformedURLException {
-		URL url = new URL("http://127.0.0.1:" + HTTPD_PORT + NanoHTTPD.ACTION_ADD + "?" + NanoHTTPD.PARAM_HASHCODE + "=" + hashCode);
+		URL url = new URL("http://127.0.0.1:" + HTTPD_PORT + HttpHandler.ACTION_ADD + "?" + HttpHandler.PARAM_HASHCODE + "=" + hashCode);
 		BufferedReader in = null;
 		try {
 			in = new BufferedReader(new InputStreamReader( url.openStream()));
