@@ -7,9 +7,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
+
+import com.solt.media.util.Constants;
+import com.solt.media.util.FileUtils;
 
 public class LibTorrent {
 	/**
@@ -124,13 +124,10 @@ public class LibTorrent {
 	public static final int DEFAULT_FLAGS = FLAG_UPDATE_SUBSCRIBE
 			| FLAG_AUTO_MANAGED | FLAG_PAUSED | FLAG_APPLY_IP_FILTER;
 
-	private static final String LIBTORRENT_DLL = "libtorrent.dll";
-	private static final Set<String> mediaExts = new HashSet<String>();
+	private static final String LIBTORRENT_DLL = Constants.isLinux ? "libtorrent.so" : "libtorrent.dll";
 	
 	static {
 		loadLibraryFromJar();
-		String[] extensions = new String[] {"mp3", "mp4", "ogv", "flv", "mov", "mkv", "avi", "asf", "wmv", "divx"};
-		mediaExts.addAll(Arrays.asList(extensions));
 	}
 	
 	LibTorrent() {
@@ -377,7 +374,7 @@ public class LibTorrent {
 	 * @return true if successful and false if otherwise
 	 * @throws TorrentException
 	 */
-	public native boolean pauseTorrent(String hashCode) throws TorrentException;
+	public native void pauseTorrent(String hashCode) throws TorrentException;
 
 	// -----------------------------------------------------------------------------
 	/**
@@ -387,7 +384,7 @@ public class LibTorrent {
 	 * @return true if successful and false if otherwise
 	 * @throws TorrentException
 	 */
-	public native boolean resumeTorrent(String hashCode)
+	public native void resumeTorrent(String hashCode)
 			throws TorrentException;
 
 	// -----------------------------------------------------------------------------
@@ -420,16 +417,6 @@ public class LibTorrent {
 			throws TorrentException;
 
 	/**
-	 * get number continuous bytes from a given offset
-	 * 
-	 * @param hashCode
-	 * @param offset
-	 * @return
-	 */
-	public native long getTorrentContinuousSize(String hashCode, long offset)
-			throws TorrentException;
-
-	/**
 	 * set read operation of the specified piece from torrent. You must have
 	 * completed the download of the specified piece before calling this
 	 * function. Note that if you read multiple pieces, the read operations are
@@ -454,6 +441,9 @@ public class LibTorrent {
 	 * @throws TorrentException
 	 */
 	public native int readTorrentPiece(String hashCode, int pieceIdx,
+			byte[] buffer) throws TorrentException;
+	
+	public native void addTorrentPiece(String hashCode, int pieceIdx,
 			byte[] buffer) throws TorrentException;
 
 	/**
@@ -637,14 +627,14 @@ public class LibTorrent {
 			throws TorrentException;
 
 	/**
-	 * get index of first in-completed piece from a given offset
+	 * get index of first in-completed piece from a given piece index
 	 * 
 	 * @param hashCode
 	 * @param offset
 	 * @return index of first in-completed piece
 	 * @throws TorrentException
 	 */
-	public native int getFirstPieceIncomplete(String hashCode, long offset)
+	public native int getFirstPieceIncomplete(String hashCode, int fromPiece)
 			throws TorrentException;
 	
 	public boolean getPieceState(PiecesState state) throws TorrentException {
@@ -878,7 +868,7 @@ public class LibTorrent {
 		long maxSize = 0;
 		int index = -1;
 		for (int i = 0; i < entries.length; ++i) {
-			if (isStreamable(entries[i]) && entries[i].getSize() > maxSize) {
+			if (FileUtils.isStreamable(entries[i]) && entries[i].getSize() > maxSize) {
 				maxSize = entries[i].getSize();
 				index = i;
 			}
@@ -886,12 +876,4 @@ public class LibTorrent {
 		return index;
 	}
 
-	private boolean isStreamable(FileEntry entry) {
-		int index = entry.getPath().lastIndexOf('.');
-		if (index != -1) {
-			String extension = entry.getPath().substring(index + 1).toLowerCase();
-			return mediaExts.contains(extension);
-		}
-		return false;
-	}
 }

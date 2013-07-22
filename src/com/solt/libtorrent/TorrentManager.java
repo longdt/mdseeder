@@ -1,12 +1,13 @@
 package com.solt.libtorrent;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.net.MalformedURLException;
+import java.net.Socket;
 import java.net.URI;
 import java.net.URL;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Set;
 
@@ -26,6 +27,7 @@ public class TorrentManager {
 	private static final int HTTPD_PORT = 18080;
 	private static final Boolean TORRENT_FILE = true;
 	private static final Boolean MAGNET_FILE = false;
+	private String currentStream;
 	private LibTorrent libTorrent;
 	private NanoHTTPD httpd;
 	private LinkedHashMap<String, Boolean> torrents;
@@ -34,40 +36,46 @@ public class TorrentManager {
 	private static TorrentManager instance;
 	private boolean processAlerts;
 	private Thread alertsService;
+	private File root;
 
 	private TorrentManager(int port, String wwwRoot) throws IOException {
 		torrentsDir = SystemProperties.getTorrentsDir();
-		torrents = new LinkedHashMap<String, Boolean>();
+		torrents = new LinkedHashMap<String, Boolean>(16, 0.75f, true);
+		root = new File(wwwRoot);
+		httpd = new NanoHTTPD(HTTPD_PORT, root);
 		libTorrent = new LibTorrent();
-		File root = new File(wwwRoot);
-		httpd = new NanoHTTPD(HTTPD_PORT, root, libTorrent);
-		libTorrent.setSession(port, root, 0, 0);
+		ConfigurationManager conf = ConfigurationManager.getInstance();
+		int upload = conf.getInt(ConfigurationManager.SESSION_UPLOAD_LIMIT, 100 * 1024);
+		int download = conf.getInt(ConfigurationManager.SESSION_DOWNLOAD_LIMIT, 1024 * 1024);
+		libTorrent.setSession(port, root, upload, download);
 		libTorrent.setSessionOptions(true, true, true, true);
 		loadAsyncExistTorrents();
+		httpd.setLibTorrent(libTorrent);
 	}
 
 	/**
 	 * 
 	 */
 	private void loadAsyncExistTorrents() {
-		String hashCode = null;
 		String magnet = null;
-		int flags = LibTorrent.FLAG_OVERRIDE_RESUME_DATA | LibTorrent.FLAG_SHARE_MODE;
-		for (File torrent : torrentsDir.listFiles()) {
-			if (torrent.isDirectory()) {
-				continue;
-			}
-			if (torrent.getName().endsWith(Constants.TORRENT_FILE_EXTENSION)) {
+		int flags = LibTorrent.FLAG_AUTO_MANAGED | LibTorrent.FLAG_SHARE_MODE;
+		Collection<String> hashCodes = ConfigurationManager.getInstance().getStringCollection(ConfigurationManager.TORRENT_HASHCODES);
+		for (String hashCode : hashCodes) {
+			File torrent = new File(torrentsDir, hashCode + Constants.TORRENT_FILE_EXTENSION);
+			if (torrent.isFile()) {
 				hashCode = libTorrent.addAsyncTorrent(torrent.getAbsolutePath(), 0,
 						flags);
 				if (hashCode != null) {
 					torrents.put(hashCode, TORRENT_FILE);
 				}
-			} else if (torrent.getName().endsWith(Constants.MAGNET_FILE_EXTENSION)) {
-				magnet = FileUtils.getStringContent(torrent);
-				hashCode = libTorrent.addAsyncMagnetUri(magnet, 0, flags);
-				if (hashCode != null) {
-					torrents.put(hashCode, MAGNET_FILE);
+			} else {
+				torrent = new File(torrentsDir, hashCode + Constants.MAGNET_FILE_EXTENSION);
+				if (torrent.isFile()) {
+					magnet = FileUtils.getStringContent(torrent);
+					hashCode = libTorrent.addAsyncMagnetUri(magnet, 0, flags);
+					if (hashCode != null) {
+						torrents.put(hashCode, MAGNET_FILE);
+					}
 				}
 			}
 		}
@@ -122,28 +130,64 @@ public class TorrentManager {
 		}
 	}
 
-	public synchronized String addTorrent(File torrentFile) {
+	private void initStream(String hashCode) {
 		try {
-			String hashCode = libTorrent.addTorrent(
-					torrentFile.getAbsolutePath(), 0, 0);
-			if (hashCode != null) {
-				libTorrent.resumeTorrent(hashCode);
-				libTorrent.setAutoManaged(hashCode, false);
-				libTorrent.setUploadMode(hashCode, false);
-				Boolean existFile = torrents.put(hashCode, TORRENT_FILE);
-				if (existFile == null) {
-					FileUtils.copyFile(torrentFile, new File(torrentsDir,
-							hashCode + Constants.TORRENT_FILE_EXTENSION));
-					policy.prepare(torrentFile.getAbsolutePath());
-				} else if (!existFile) {
-					FileUtils.copyFile(torrentFile, new File(torrentsDir,
-							hashCode + Constants.TORRENT_FILE_EXTENSION));
-				}
-				return "http://127.0.0.1:" + HTTPD_PORT + HttpHandler.ACTION_STREAM
-						+ "?" + HttpHandler.PARAM_HASHCODE + "=" + hashCode;
+//			libTorrent.setAutoManaged(hashCode, false);
+//			libTorrent.setUploadMode(hashCode, false);
+			libTorrent.setShareMode(hashCode, false);
+			libTorrent.resumeTorrent(hashCode);
+			if (currentStream == null) {
+				currentStream = hashCode;
+			} else if (!hashCode.equals(currentStream)) {
+//				libTorrent.setUploadMode(currentStream, true);
+				libTorrent.setShareMode(currentStream, true);
+				currentStream = hashCode;
 			}
 		} catch (TorrentException e) {
 			e.printStackTrace();
+		}
+	}
+	
+	private String getMediaResource(String hashCode) {
+		try {
+			int state = libTorrent.getTorrentState(hashCode);
+			if (state == 4 || state == 5) {
+				FileEntry[] entries = libTorrent.getTorrentFiles(hashCode);
+				long maxSize = 0;
+				int index = -1;
+				for (int i = 0; i < entries.length; ++i) {
+					if (FileUtils.isStreamable(entries[i]) && entries[i].getSize() > maxSize) {
+						maxSize = entries[i].getSize();
+						index = i;
+					}
+				}
+				if (index == -1) {
+					return null;
+				}
+				File f = new File(root, entries[index].getPath());
+				return f.getAbsolutePath();
+			}
+		} catch (TorrentException e) {
+		}
+		return "http://127.0.0.1:" + HTTPD_PORT + HttpHandler.ACTION_STREAM
+				+ "?" + HttpHandler.PARAM_HASHCODE + "=" + hashCode;
+	}
+
+	public synchronized String addTorrent(File torrentFile) {
+		String hashCode = libTorrent.addTorrent(
+				torrentFile.getAbsolutePath(), 0, LibTorrent.FLAG_AUTO_MANAGED);
+		if (hashCode != null) {
+			initStream(hashCode);
+			Boolean existFile = torrents.put(hashCode, TORRENT_FILE);
+			if (existFile == null) {
+				FileUtils.copyFile(torrentFile, new File(torrentsDir,
+						hashCode + Constants.TORRENT_FILE_EXTENSION));
+				policy.prepare(torrentFile.getAbsolutePath());
+			} else if (!existFile) {
+				FileUtils.copyFile(torrentFile, new File(torrentsDir,
+						hashCode + Constants.TORRENT_FILE_EXTENSION));
+			}
+			return getMediaResource(hashCode);
 		}
 		return null;
 	}
@@ -153,11 +197,9 @@ public class TorrentManager {
 		try {
 			FileUtils.copyFile(url.openStream(), torrentFile);
 			String hashCode = libTorrent.addTorrent(
-					torrentFile.getAbsolutePath(), 0, 0);
+					torrentFile.getAbsolutePath(), 0, LibTorrent.FLAG_AUTO_MANAGED);
 			if (hashCode != null) {
-				libTorrent.resumeTorrent(hashCode);
-				libTorrent.setAutoManaged(hashCode, false);
-				libTorrent.setUploadMode(hashCode, false);
+				initStream(hashCode);
 				Boolean existFile = torrents.put(hashCode, TORRENT_FILE);
 				if (existFile == null) {
 					torrentFile.renameTo(new File(torrentsDir, hashCode + Constants.TORRENT_FILE_EXTENSION));
@@ -165,8 +207,7 @@ public class TorrentManager {
 				} else if (!existFile) {
 					torrentFile.renameTo(new File(torrentsDir, hashCode + Constants.TORRENT_FILE_EXTENSION));
 				}
-				return "http://127.0.0.1:" + HTTPD_PORT + HttpHandler.ACTION_STREAM
-						+ "?" + HttpHandler.PARAM_HASHCODE + "=" + hashCode;
+				return getMediaResource(hashCode);
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -175,27 +216,28 @@ public class TorrentManager {
 	}
 	
 	public synchronized String addTorrent(URI magnetUri) {
-		try {
-			String hashCode = libTorrent.addMagnetUri(
-					magnetUri.toString(), 0, 0);
-			if (hashCode != null) {
-				libTorrent.resumeTorrent(hashCode);
-				libTorrent.setAutoManaged(hashCode, false);
-				libTorrent.setUploadMode(hashCode, false);
-				Boolean existFile = torrents.put(hashCode, MAGNET_FILE);
-				if (existFile == null) {
-					//TODO save magnet link
-					FileUtils.writeFile(new File(torrentsDir,
-							hashCode + Constants.MAGNET_FILE_EXTENSION), magnetUri.toString());
-					policy.prepare(hashCode);
-				}
-				return "http://127.0.0.1:" + HTTPD_PORT + HttpHandler.ACTION_STREAM
-						+ "?" + HttpHandler.PARAM_HASHCODE + "=" + hashCode;
+		String hashCode = libTorrent.addMagnetUri(
+				magnetUri.toString(), 0, LibTorrent.FLAG_AUTO_MANAGED);
+		if (hashCode != null) {
+			initStream(hashCode);
+			Boolean existFile = torrents.put(hashCode, MAGNET_FILE);
+			if (existFile == null) {
+				//TODO save magnet link
+				FileUtils.writeFile(new File(torrentsDir,
+						hashCode + Constants.MAGNET_FILE_EXTENSION), magnetUri.toString());
+				policy.prepare(hashCode);
 			}
-		} catch (TorrentException e) {
-			e.printStackTrace();
+			return getMediaResource(hashCode);
 		}
 		return null;
+	}
+	
+	public int getTorrentState(String hashCode) throws TorrentException {
+		return libTorrent.getTorrentState(hashCode);
+	}
+	
+	public int getTorrentDownloadRate(String hashCode) throws TorrentException {
+		return libTorrent.getTorrentDownloadRate(hashCode, true);
 	}
 	
 	public String getMediaUrl(String hashCode) {
@@ -204,6 +246,10 @@ public class TorrentManager {
 					+ "?" + HttpHandler.PARAM_HASHCODE + "=" + hashCode;
 		}
 		return null;
+	}
+	
+	public String getCurrentStream() {
+		return currentStream;
 	}
 
 	public Set<String> getTorrents() {
@@ -216,10 +262,26 @@ public class TorrentManager {
 	
 	public void cancelStream() {
 		httpd.cancelStream();
+		try {
+			if (currentStream != null) {
+//				libTorrent.setUploadMode(currentStream, true);
+				libTorrent.setShareMode(currentStream, true);
+			}
+		} catch (TorrentException e) {
+			e.printStackTrace();
+		}
 	}
 
 	public void shutdown() {
 		long start = System.nanoTime();
+		if (currentStream != null) {
+			try {
+//				libTorrent.setUploadMode(currentStream, true);
+				libTorrent.setShareMode(currentStream, true);
+			} catch (TorrentException e) {
+				e.printStackTrace();
+			}
+		}
 		httpd.shutdown();
 		stopAlertsProcessService();
 		libTorrent.abortSession();
@@ -240,20 +302,23 @@ public class TorrentManager {
 	}
 
 	/**
+	 * asynchronize request add torrent
 	 * @param string
 	 * @throws MalformedURLException 
 	 */
-	public static void requestAddTorrent(String hashCode) throws MalformedURLException {
-		URL url = new URL("http://127.0.0.1:" + HTTPD_PORT + HttpHandler.ACTION_ADD + "?" + HttpHandler.PARAM_HASHCODE + "=" + hashCode);
-		BufferedReader in = null;
+	public static void requestAddTorrent(String movieId, boolean file, boolean sub) throws MalformedURLException {
+		Socket socket = null;
 		try {
-			in = new BufferedReader(new InputStreamReader( url.openStream()));
-			System.out.println(in.readLine());
+			socket = new Socket("127.0.0.1", HTTPD_PORT);
+			PrintWriter writer = new PrintWriter(socket.getOutputStream());
+			writer.println("GET " + HttpHandler.ACTION_ADD + "?" + HttpHandler.PARAM_MOVIEID + "=" + movieId + "&" + HttpHandler.PARAM_FILE +"=" + file + "&" + HttpHandler.PARAM_SUB + "=" + sub + " HTTP/1.0");
+			writer.println();
+			writer.close();
 		} catch (IOException e) {
 		} finally {
-			if (in != null) {
+			if (socket != null) {
 				try {
-					in.close();
+					socket.close();
 				} catch (IOException e) {
 					e.printStackTrace();
 				}

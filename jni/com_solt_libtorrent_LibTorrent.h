@@ -128,17 +128,17 @@ JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_removeTorrent
 /*
  * Class:     com_solt_libtorrent_LibTorrent
  * Method:    pauseTorrent
- * Signature: (Ljava/lang/String;)Z
+ * Signature: (Ljava/lang/String;)V
  */
-JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_pauseTorrent
+JNIEXPORT void JNICALL Java_com_solt_libtorrent_LibTorrent_pauseTorrent
   (JNIEnv *, jobject, jstring);
 
 /*
  * Class:     com_solt_libtorrent_LibTorrent
  * Method:    resumeTorrent
- * Signature: (Ljava/lang/String;)Z
+ * Signature: (Ljava/lang/String;)V
  */
-JNIEXPORT jboolean JNICALL Java_com_solt_libtorrent_LibTorrent_resumeTorrent
+JNIEXPORT void JNICALL Java_com_solt_libtorrent_LibTorrent_resumeTorrent
   (JNIEnv *, jobject, jstring);
 
 /*
@@ -159,14 +159,6 @@ JNIEXPORT jlong JNICALL Java_com_solt_libtorrent_LibTorrent_getTorrentProgressSi
 
 /*
  * Class:     com_solt_libtorrent_LibTorrent
- * Method:    getTorrentContinuousSize
- * Signature: (Ljava/lang/String;J)J
- */
-JNIEXPORT jlong JNICALL Java_com_solt_libtorrent_LibTorrent_getTorrentContinuousSize
-  (JNIEnv *, jobject, jstring, jlong);
-
-/*
- * Class:     com_solt_libtorrent_LibTorrent
  * Method:    setTorrentReadPiece
  * Signature: (Ljava/lang/String;I)V
  */
@@ -179,6 +171,14 @@ JNIEXPORT void JNICALL Java_com_solt_libtorrent_LibTorrent_setTorrentReadPiece
  * Signature: (Ljava/lang/String;I[B)I
  */
 JNIEXPORT jint JNICALL Java_com_solt_libtorrent_LibTorrent_readTorrentPiece
+  (JNIEnv *, jobject, jstring, jint, jbyteArray);
+
+/*
+ * Class:     com_solt_libtorrent_LibTorrent
+ * Method:    addTorrentPiece
+ * Signature: (Ljava/lang/String;I[B)V
+ */
+JNIEXPORT void JNICALL Java_com_solt_libtorrent_LibTorrent_addTorrentPiece
   (JNIEnv *, jobject, jstring, jint, jbyteArray);
 
 /*
@@ -320,10 +320,10 @@ JNIEXPORT jint JNICALL Java_com_solt_libtorrent_LibTorrent_getPieceSize
 /*
  * Class:     com_solt_libtorrent_LibTorrent
  * Method:    getFirstPieceIncomplete
- * Signature: (Ljava/lang/String;J)I
+ * Signature: (Ljava/lang/String;I)I
  */
 JNIEXPORT jint JNICALL Java_com_solt_libtorrent_LibTorrent_getFirstPieceIncomplete
-  (JNIEnv *, jobject, jstring, jlong);
+  (JNIEnv *, jobject, jstring, jint);
 
 /*
  * Class:     com_solt_libtorrent_LibTorrent

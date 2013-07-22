@@ -8,19 +8,20 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.RandomAccessFile;
-import java.net.MalformedURLException;
 import java.net.Socket;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.URLConnection;
 import java.nio.channels.SocketChannel;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.StringTokenizer;
-import java.util.TimeZone;
+
+import org.apache.log4j.Logger;
 
 import com.solt.libtorrent.FileEntry;
 import com.solt.libtorrent.LibTorrent;
@@ -28,7 +29,10 @@ import com.solt.libtorrent.PartialPieceInfo;
 import com.solt.libtorrent.PieceInfoComparator;
 import com.solt.libtorrent.TorrentException;
 import com.solt.libtorrent.TorrentManager;
+import com.solt.media.util.Constants;
+import com.solt.media.util.FileUtils;
 import com.solt.media.util.StringUtils;
+import com.solt.media.util.SystemProperties;
 
 public class HttpHandler implements Runnable{
 	public static final String ACTION_STREAM = "/stream";
@@ -38,14 +42,22 @@ public class HttpHandler implements Runnable{
 	public static final String ACTION_ADD = "/add";
 	
 	public static final String ACTION_DEL = "/del";
+	
+	public static final String ACTION_SHUTDOWN = "/shutdown";
 
 	public static final String PARAM_HASHCODE = "hashcode";
-
-	private static final String PARAM_FILE = "file";
 	
-	private static final String DOWN_TORRENT_LINK = "http://localhost/";
+	public static final String PARAM_MOVIEID = "movieId";
 
+	public static final String PARAM_FILE = "file";
+	
+	public static final String PARAM_SUB = "sub";
+
+	private static final String HEADER_FILENAME = "filename";
+
+	private static final Logger logger = Logger.getLogger(HttpHandler.class);
 	private static final PieceInfoComparator pieceComparator = new PieceInfoComparator();
+
 	private File rootDir;
 	private LibTorrent libTorrent;
 	private NanoHTTPD httpd;
@@ -76,15 +88,6 @@ public class HttpHandler implements Runnable{
 		while (st.hasMoreTokens())
 			theMimeTypes.put(st.nextToken(), st.nextToken());
 	}
-	/**
-	 * GMT date formatter
-	 */
-	private static java.text.SimpleDateFormat gmtFrmt;
-	static {
-		gmtFrmt = new java.text.SimpleDateFormat(
-				"E, d MMM yyyy HH:mm:ss 'GMT'", Locale.US);
-		gmtFrmt.setTimeZone(TimeZone.getTimeZone("GMT"));
-	}
 	
 	public HttpHandler(Socket s, NanoHTTPD httpd) {
 		mySocket = s;
@@ -108,7 +111,13 @@ public class HttpHandler implements Runnable{
 								+ ioe.getMessage());
 			} catch (Throwable t) {
 			}
-		} catch (InterruptedException ie) {
+		} catch (URISyntaxException e) {
+			try {
+				sendMessage(HttpStatus.HTTP_BADREQUEST, e.getMessage());
+			} catch (InterruptedException e1) {
+			}
+		}
+		catch (InterruptedException ie) {
 			// Thrown by sendError, ignore and exit the thread.
 		} finally {
 			stop();
@@ -117,7 +126,7 @@ public class HttpHandler implements Runnable{
 	}
 
 	private void serveRequest(HttpRequest request)
-			throws InterruptedException, MalformedURLException {
+			throws InterruptedException, IOException, URISyntaxException {
 		String uri = request.getUri();
 		String hashCode = request.getParam(PARAM_HASHCODE);
 		if (uri.equals(ACTION_STREAM) && hashCode != null) {
@@ -127,13 +136,36 @@ public class HttpHandler implements Runnable{
 			String view = hashCode != null? getTorrentInfo(hashCode) : listTorrents();
 			sendMessage(HttpStatus.HTTP_OK, NanoHTTPD.MIME_HTML, view);
 		} else if (uri.equals(ACTION_ADD)) {
+			long movieId = Long.parseLong(request.getParam(PARAM_MOVIEID));
+			boolean file = Boolean.parseBoolean(request.getParam(PARAM_FILE));
+			boolean sub = Boolean.parseBoolean(request.getParam(PARAM_SUB));
 			TorrentManager manager = TorrentManager.getInstance();
-			String mediaUrl = manager.getMediaUrl(hashCode);
-			if (mediaUrl == null) {
-				URL url = new URL(DOWN_TORRENT_LINK + hashCode + ".torrent");
+			String mediaUrl = null;
+			URL url = new URL(Constants.DOWN_TORRENT_LINK + movieId);
+			if (file) {
 				mediaUrl = manager.addTorrent(url);
+			} else {
+				String magnet = FileUtils.getStringContent(url.openStream());
+				mediaUrl = manager.addTorrent(new URI(magnet));
 			}
 			if (mediaUrl != null) {
+				String subFile = null;
+				if (sub) {
+					URLConnection subConn = new URL(Constants.DOWN_SUB_LINK + movieId).openConnection();
+					String fileName = subConn.getHeaderField(HEADER_FILENAME);
+					if (fileName == null) {
+						sendMessage(HttpStatus.HTTP_OK, mediaUrl);
+						return;
+					}
+					fileName = "sharephim." + FileUtils.getExtension(fileName);
+					File temp = new File(SystemProperties.getMetaDataPath(), fileName);
+					if (FileUtils.copyFile(subConn.getInputStream(), temp)) {
+						subFile = temp.getAbsolutePath();
+						temp.deleteOnExit();
+					} else {
+						temp.delete();
+					}
+				}
 				sendMessage(HttpStatus.HTTP_OK, mediaUrl);
 			} else {
 				sendMessage(HttpStatus.HTTP_NOTFOUND, "false");
@@ -146,6 +178,7 @@ public class HttpHandler implements Runnable{
 			} catch (TorrentException e) {
 				sendMessage(HttpStatus.HTTP_BADREQUEST, "invalid hashcode");
 			}
+		} else if (uri.equals(ACTION_SHUTDOWN)) {
 		} else {
 			sendMessage(HttpStatus.HTTP_BADREQUEST, "invalid uri");
 		}
@@ -177,7 +210,7 @@ public class HttpHandler implements Runnable{
 		StringBuilder info = new StringBuilder();
 		Set<String> torrents = TorrentManager.getInstance().getTorrents();
 		info.append("<html><head><meta http-equiv='refresh' content='1' ></head><body><table>");
-		info.append("<tr><td>hashcode<td>state<td>progress<td>downloaded<td>download rate<td>name<td>upload mode<td>auto manage\n");
+		info.append("<tr><td>hashcode<td>state<td>progress<td>downloaded<td>download rate<td>name<td>upload mode<td>share mode<td>auto manage\n");
 		try {
 			for (String hashCode : torrents) {
 				info.append("<tr><td>").append(hashCode)
@@ -187,6 +220,7 @@ public class HttpHandler implements Runnable{
 						.append("<td>").append(libTorrent.getTorrentDownloadRate(hashCode, true))
 						.append("<td>").append(libTorrent.getTorrentName(hashCode))
 						.append("<td>").append(libTorrent.isUploadMode(hashCode))
+						.append("<td>").append(libTorrent.isShareMode(hashCode))
 						.append("<td>").append(libTorrent.isAutoManaged(hashCode))
 						.append('\n');
 			}
@@ -336,7 +370,6 @@ public class HttpHandler implements Runnable{
 			PrintWriter pw = new PrintWriter(mySocket.getOutputStream());
 			pw.print("HTTP/1.0 " + status + " \r\n");
 			pw.print("Content-Type: " + mimeType + "\r\n");
-			pw.print("Date: " + gmtFrmt.format(new Date()) + "\r\n");
 			pw.print("Accept-Ranges: bytes\r\n");
 			pw.print("\r\n");
 			pw.flush();
@@ -375,9 +408,6 @@ public class HttpHandler implements Runnable{
 			if (mime != null)
 				pw.print("Content-Type: " + mime + "\r\n");
 
-			if (header == null || header.get("Date") == null)
-				pw.print("Date: " + gmtFrmt.format(new Date()) + "\r\n");
-
 			if (header != null) {
 				for (Entry<String, String> entry : header.entrySet()) {
 					pw.print(entry.getKey() + ": " + entry.getValue()
@@ -404,8 +434,7 @@ public class HttpHandler implements Runnable{
 				pw.print(msg);
 			}
 		} catch (Exception e) {
-			// System.err.println("close stream: " +
-			// response.getTransferOffset() + " due: " + e.getMessage());
+			logger.debug("close stream: " +  req.getTransferOffset() + " due: " + e.getMessage());
 			//e.printStackTrace();
 		} finally {
 			if (pw != null) {
@@ -446,7 +475,7 @@ public class HttpHandler implements Runnable{
 
 	private void sendTorrentData(String hashCode, int index, long dataLength,
 			long transferOffset) throws Exception {
-		new TorrentStreamerImpl(this, hashCode, index, dataLength, transferOffset).stream();
+		new HyperStreamer(this, hashCode, index, dataLength, transferOffset).stream();
 	}
 
 
@@ -501,17 +530,33 @@ public class HttpHandler implements Runnable{
 		try {
 			String hashCode = request.getParam(PARAM_HASHCODE);
 			String file = request.getParam(PARAM_FILE);
-			int index = 0;
+			int index = -1;
+			FileEntry[] entries = null;
 			if (file != null) {
 				index = Integer.parseInt(file);
 			} else {
-				index = libTorrent.getBestStreamableFile(hashCode);
+				do {
+					entries = libTorrent.getTorrentFiles(hashCode);
+					if (entries == null) {
+						Thread.sleep(1000);
+					} else {
+						break;
+					}
+				} while (!libTorrent.isUploadMode(hashCode));
+				if (entries != null) {
+					long maxSize = 0;
+					for (int i = 0; i < entries.length; ++i) {
+						if (FileUtils.isStreamable(entries[i]) && entries[i].getSize() > maxSize) {
+							maxSize = entries[i].getSize();
+							index = i;
+						}
+					}
+				}
 			}
 			if (index == -1) {
 				sendMessage(HttpStatus.HTTP_NOTFOUND, "Error 404, file not found.");
 				return null;
 			}
-			FileEntry[] entries = libTorrent.getTorrentFiles(hashCode);
 			File f = new File(rootDir, entries[index].getPath());
 
 			// Get MIME type from file name extension, if possible
@@ -587,7 +632,7 @@ public class HttpHandler implements Runnable{
 					res.setHeader("ETag", etag);
 				}
 			}
-
+			logger.debug("serve request torrent: " + hashCode + " from " + res.getTransferOffset() + " to consume " + res.getDataLength() + " with method: " + request.getMethod());
 		} catch (NumberFormatException e) {
 			sendMessage(HttpStatus.HTTP_NOTFOUND, "Error 404, file not found.");
 		} catch (IOException ioe) {
