@@ -41,7 +41,7 @@ public class Constants {
 	public static String UPDATE_URL = "http://sharephim.vn/api/update.json";
 	public static final String DOWN_TORRENT_LINK = "http://sharephim.vn/api/movie/";
 	public static final String DOWN_SUB_LINK = "http://sharephim.vn/api/sub/";
-	public static String APP_NAME = "MediaPlayer";
+	public static String APP_NAME = "MdSeeder";
 	public static String PROTOCOL = "mdp";
 	
 	public static final String TORRENT_FILE_EXTENSION = ".tor";

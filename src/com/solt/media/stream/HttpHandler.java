@@ -53,7 +53,6 @@ public class HttpHandler implements Runnable{
 	
 	public static final String PARAM_SUB = "sub";
 
-	private static final String HEADER_FILENAME = "filename";
 
 	private static final Logger logger = Logger.getLogger(HttpHandler.class);
 	private static final PieceInfoComparator pieceComparator = new PieceInfoComparator();
@@ -129,56 +128,9 @@ public class HttpHandler implements Runnable{
 			throws InterruptedException, IOException, URISyntaxException {
 		String uri = request.getUri();
 		String hashCode = request.getParam(PARAM_HASHCODE);
-		if (uri.equals(ACTION_STREAM) && hashCode != null) {
-			TorrentRequest r = serve(request);
-			sendResponse(r);
-		} else if (uri.equals(ACTION_VIEW)) {
+		if (uri.equals(ACTION_VIEW)) {
 			String view = hashCode != null? getTorrentInfo(hashCode) : listTorrents();
 			sendMessage(HttpStatus.HTTP_OK, NanoHTTPD.MIME_HTML, view);
-		} else if (uri.equals(ACTION_ADD)) {
-			long movieId = Long.parseLong(request.getParam(PARAM_MOVIEID));
-			boolean file = Boolean.parseBoolean(request.getParam(PARAM_FILE));
-			boolean sub = Boolean.parseBoolean(request.getParam(PARAM_SUB));
-			TorrentManager manager = TorrentManager.getInstance();
-			String mediaUrl = null;
-			URL url = new URL(Constants.DOWN_TORRENT_LINK + movieId);
-			if (file) {
-				mediaUrl = manager.addTorrent(url);
-			} else {
-				String magnet = FileUtils.getStringContent(url.openStream());
-				mediaUrl = manager.addTorrent(new URI(magnet));
-			}
-			if (mediaUrl != null) {
-				String subFile = null;
-				if (sub) {
-					URLConnection subConn = new URL(Constants.DOWN_SUB_LINK + movieId).openConnection();
-					String fileName = subConn.getHeaderField(HEADER_FILENAME);
-					if (fileName == null) {
-						sendMessage(HttpStatus.HTTP_OK, mediaUrl);
-						return;
-					}
-					fileName = "sharephim." + FileUtils.getExtension(fileName);
-					File temp = new File(SystemProperties.getMetaDataPath(), fileName);
-					if (FileUtils.copyFile(subConn.getInputStream(), temp)) {
-						subFile = temp.getAbsolutePath();
-						temp.deleteOnExit();
-					} else {
-						temp.delete();
-					}
-				}
-				sendMessage(HttpStatus.HTTP_OK, mediaUrl);
-			} else {
-				sendMessage(HttpStatus.HTTP_NOTFOUND, "false");
-			}
-		} else if (uri.equals(ACTION_DEL) && hashCode != null) {
-			TorrentManager manager = TorrentManager.getInstance();
-			try {
-				manager.removeTorrent(hashCode);
-				sendMessage(HttpStatus.HTTP_OK, "true");
-			} catch (TorrentException e) {
-				sendMessage(HttpStatus.HTTP_BADREQUEST, "invalid hashcode");
-			}
-		} else if (uri.equals(ACTION_SHUTDOWN)) {
 		} else {
 			sendMessage(HttpStatus.HTTP_BADREQUEST, "invalid uri");
 		}
@@ -383,101 +335,6 @@ public class HttpHandler implements Runnable{
 		}
 		throw new InterruptedException();
 	}
-
-	/**
-	 * Sends given response to the socket.
-	 * 
-	 * @throws InterruptedException
-	 */
-	private void sendResponse(TorrentRequest req)
-			throws InterruptedException {
-		String status = req.getStatus();
-		String mime = req.getMimeType();
-		Map<String, String> header = req.getHeaders();
-
-		String hashCode = req.getHashCode();
-		String msg = req.getMessage();
-		PrintWriter pw = null;
-		try {
-			if (status == null)
-				throw new Error("sendResponse(): Status can't be null.");
-			OutputStream out = mySocket.getOutputStream();
-			pw = new PrintWriter(out);
-			pw.print("HTTP/1.0 " + status + " \r\n");
-
-			if (mime != null)
-				pw.print("Content-Type: " + mime + "\r\n");
-
-			if (header != null) {
-				for (Entry<String, String> entry : header.entrySet()) {
-					pw.print(entry.getKey() + ": " + entry.getValue()
-							+ "\r\n");
-				}
-			}
-
-			pw.print("\r\n");
-			pw.flush();
-
-			if (hashCode != null) {
-				int state = libTorrent.getTorrentState(hashCode);
-				if (state == -1) {
-					return;
-				} else if (state == 4 || state == 5) {
-					FileEntry[] entries = libTorrent.getTorrentFiles(hashCode);
-					File f = new File(rootDir, entries[req.getIndex()].getPath());
-					sendFileData(out, f, req.getDataLength(), req.getTransferOffset());
-				} else {
-					sendTorrentData(hashCode, req.getIndex(), req.getDataLength(),
-							req.getTransferOffset());
-				}
-			} else if (msg != null) {
-				pw.print(msg);
-			}
-		} catch (Exception e) {
-			logger.debug("close stream: " +  req.getTransferOffset() + " due: " + e.getMessage());
-			//e.printStackTrace();
-		} finally {
-			if (pw != null) {
-				pw.close();
-			}
-		}
-	}
-
-	/**
-	 * @param pw
-	 * @param f
-	 * @param dataLength
-	 * @param transferOffset
-	 * @throws IOException 
-	 */
-	private void sendFileData(OutputStream out, File f, long dataLength,
-			long transferOffset) throws IOException {
-		RandomAccessFile raf = null;	 
-		try {
-			raf = new RandomAccessFile(f, "r");
-			raf.seek(transferOffset);
-			byte[] buf = new byte[1024];
-			int len = 0;
-			while (streaming && dataLength > 0 && !Thread.currentThread().isInterrupted()) {
-				len = raf.read(buf);
-				if (len == -1) {
-					break;
-				}
-				out.write(buf, 0, len);
-				dataLength = dataLength - len;
-			}
-		} finally {
-			if (raf != null) {
-				raf.close();
-			}
-		}
-	}
-
-	private void sendTorrentData(String hashCode, int index, long dataLength,
-			long transferOffset) throws Exception {
-		new HyperStreamer(this, hashCode, index, dataLength, transferOffset).stream();
-	}
-
 
 
 

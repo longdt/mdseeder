@@ -13,6 +13,8 @@ import java.util.Set;
 
 import org.apache.log4j.Logger;
 
+import com.google.common.collect.BiMap;
+import com.google.common.collect.HashBiMap;
 import com.solt.libtorrent.policy.CachePolicy;
 import com.solt.libtorrent.policy.CachePolicyFactory;
 import com.solt.media.config.ConfigurationManager;
@@ -24,13 +26,14 @@ import com.solt.media.util.SystemProperties;
 
 public class TorrentManager {
 	private static final Logger logger = Logger.getLogger(TorrentManager.class);
-	private static final int HTTPD_PORT = 18080;
+	private static final int HTTPD_PORT = 18989;
 	private static final Boolean TORRENT_FILE = true;
 	private static final Boolean MAGNET_FILE = false;
 	private String currentStream;
 	private LibTorrent libTorrent;
 	private NanoHTTPD httpd;
 	private LinkedHashMap<String, Boolean> torrents;
+	private BiMap<URL, String> torLinks;
 	private File torrentsDir;
 	private CachePolicy policy;
 	private static TorrentManager instance;
@@ -41,12 +44,13 @@ public class TorrentManager {
 	private TorrentManager(int port, String wwwRoot) throws IOException {
 		torrentsDir = SystemProperties.getTorrentsDir();
 		torrents = new LinkedHashMap<String, Boolean>(16, 0.75f, true);
+		torLinks = HashBiMap.<URL, String>create();
 		root = new File(wwwRoot);
 		httpd = new NanoHTTPD(HTTPD_PORT, root);
 		libTorrent = new LibTorrent();
 		ConfigurationManager conf = ConfigurationManager.getInstance();
-		int upload = conf.getInt(ConfigurationManager.SESSION_UPLOAD_LIMIT, 100 * 1024);
-		int download = conf.getInt(ConfigurationManager.SESSION_DOWNLOAD_LIMIT, 1024 * 1024);
+		int upload = conf.getInt(ConfigurationManager.SESSION_UPLOAD_LIMIT, 200 * 1024);
+		int download = conf.getInt(ConfigurationManager.SESSION_DOWNLOAD_LIMIT, 100 * 1024);
 		libTorrent.setSession(port, root, upload, download);
 		libTorrent.setSessionOptions(true, true, true, true);
 		loadAsyncExistTorrents();
@@ -58,7 +62,7 @@ public class TorrentManager {
 	 */
 	private void loadAsyncExistTorrents() {
 		String magnet = null;
-		int flags = LibTorrent.FLAG_AUTO_MANAGED | LibTorrent.FLAG_SHARE_MODE;
+		int flags = LibTorrent.FLAG_AUTO_MANAGED;
 		Collection<String> hashCodes = ConfigurationManager.getInstance().getStringCollection(ConfigurationManager.TORRENT_HASHCODES);
 		for (String hashCode : hashCodes) {
 			File torrent = new File(torrentsDir, hashCode + Constants.TORRENT_FILE_EXTENSION);
@@ -79,6 +83,10 @@ public class TorrentManager {
 				}
 			}
 		}
+	}
+	
+	public LibTorrent getLibTorrent() {
+		return libTorrent;
 	}
 
 	public synchronized static TorrentManager getInstance() {
@@ -131,47 +139,23 @@ public class TorrentManager {
 	}
 
 	private void initStream(String hashCode) {
-		try {
-//			libTorrent.setAutoManaged(hashCode, false);
-//			libTorrent.setUploadMode(hashCode, false);
-			libTorrent.setShareMode(hashCode, false);
-			libTorrent.resumeTorrent(hashCode);
-			if (currentStream == null) {
-				currentStream = hashCode;
-			} else if (!hashCode.equals(currentStream)) {
-//				libTorrent.setUploadMode(currentStream, true);
-				libTorrent.setShareMode(currentStream, true);
-				currentStream = hashCode;
-			}
-		} catch (TorrentException e) {
-			e.printStackTrace();
-		}
+//		try {
+////			libTorrent.setAutoManaged(hashCode, false);
+////			libTorrent.setUploadMode(hashCode, false);
+//			libTorrent.setShareMode(hashCode, false);
+//			libTorrent.resumeTorrent(hashCode);
+//			if (currentStream == null) {
+//				currentStream = hashCode;
+//			} else if (!hashCode.equals(currentStream)) {
+////				libTorrent.setUploadMode(currentStream, true);
+//				libTorrent.setShareMode(currentStream, true);
+//				currentStream = hashCode;
+//			}
+//		} catch (TorrentException e) {
+//			e.printStackTrace();
+//		}
 	}
 	
-	private String getMediaResource(String hashCode) {
-		try {
-			int state = libTorrent.getTorrentState(hashCode);
-			if (state == 4 || state == 5) {
-				FileEntry[] entries = libTorrent.getTorrentFiles(hashCode);
-				long maxSize = 0;
-				int index = -1;
-				for (int i = 0; i < entries.length; ++i) {
-					if (FileUtils.isStreamable(entries[i]) && entries[i].getSize() > maxSize) {
-						maxSize = entries[i].getSize();
-						index = i;
-					}
-				}
-				if (index == -1) {
-					return null;
-				}
-				File f = new File(root, entries[index].getPath());
-				return f.getAbsolutePath();
-			}
-		} catch (TorrentException e) {
-		}
-		return "http://127.0.0.1:" + HTTPD_PORT + HttpHandler.ACTION_STREAM
-				+ "?" + HttpHandler.PARAM_HASHCODE + "=" + hashCode;
-	}
 
 	public synchronized String addTorrent(File torrentFile) {
 		String hashCode = libTorrent.addTorrent(
@@ -187,19 +171,25 @@ public class TorrentManager {
 				FileUtils.copyFile(torrentFile, new File(torrentsDir,
 						hashCode + Constants.TORRENT_FILE_EXTENSION));
 			}
-			return getMediaResource(hashCode);
+			return (hashCode);
 		}
 		return null;
 	}
 
 	public synchronized String addTorrent(URL url) {
+		String hashCode = torLinks.get(url);
+		if (hashCode != null) {
+			initStream(hashCode);
+			return hashCode;
+		}
 		File torrentFile = new File(torrentsDir, ".temp");
 		try {
 			FileUtils.copyFile(url.openStream(), torrentFile);
-			String hashCode = libTorrent.addTorrent(
+			hashCode = libTorrent.addTorrent(
 					torrentFile.getAbsolutePath(), 0, LibTorrent.FLAG_AUTO_MANAGED);
 			if (hashCode != null) {
 				initStream(hashCode);
+				torLinks.put(url, hashCode);
 				Boolean existFile = torrents.put(hashCode, TORRENT_FILE);
 				if (existFile == null) {
 					torrentFile.renameTo(new File(torrentsDir, hashCode + Constants.TORRENT_FILE_EXTENSION));
@@ -207,7 +197,7 @@ public class TorrentManager {
 				} else if (!existFile) {
 					torrentFile.renameTo(new File(torrentsDir, hashCode + Constants.TORRENT_FILE_EXTENSION));
 				}
-				return getMediaResource(hashCode);
+				return (hashCode);
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -227,7 +217,7 @@ public class TorrentManager {
 						hashCode + Constants.MAGNET_FILE_EXTENSION), magnetUri.toString());
 				policy.prepare(hashCode);
 			}
-			return getMediaResource(hashCode);
+			return (hashCode);
 		}
 		return null;
 	}
@@ -292,6 +282,7 @@ public class TorrentManager {
 			throws TorrentException {
 		if (libTorrent.removeTorrent(hashCode, true)) {
 			Boolean existFile = torrents.remove(hashCode);
+			torLinks.inverse().remove(hashCode);
 			if (existFile == null) {
 				logger.error("error occur when remove torrent: no torrent in manager");
 			} else {
